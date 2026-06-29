@@ -41,6 +41,7 @@
 #include "drivers/gles3/storage/mesh_storage.h"
 #include "drivers/gles3/storage/particles_storage.h"
 #include "drivers/gles3/storage/texture_storage.h"
+#include "servers/rendering/renderer_snap_2d.h"
 #include "drivers/gles3/storage/utilities.h"
 #include "servers/rendering/rendering_server_default.h"
 #include "servers/rendering/rendering_server_globals.h"
@@ -105,7 +106,7 @@ void RasterizerCanvasGLES3::_update_transform_to_mat4(const Transform3D &p_trans
 	p_mat4[15] = 1;
 }
 
-void RasterizerCanvasGLES3::canvas_render_items(RID p_to_render_target, Item *p_item_list, const Color &p_modulate, Light *p_light_list, Light *p_directional_light_list, const Transform2D &p_canvas_transform, RSE::CanvasItemTextureFilter p_default_filter, RSE::CanvasItemTextureRepeat p_default_repeat, bool p_snap_2d_vertices_to_pixel, bool &r_sdf_used, RenderingServerTypes::RenderInfo *r_render_info) {
+void RasterizerCanvasGLES3::canvas_render_items(RID p_to_render_target, Item *p_item_list, const Color &p_modulate, Light *p_light_list, Light *p_directional_light_list, const Transform2D &p_canvas_transform, RSE::CanvasItemTextureFilter p_default_filter, RSE::CanvasItemTextureRepeat p_default_repeat, bool p_snap_2d_transforms_to_pixel, bool p_snap_2d_vertices_to_pixel, uint8_t p_snap_2d_transforms_method, bool &r_sdf_used, RenderingServerTypes::RenderInfo *r_render_info) {
 	GLES3::TextureStorage *texture_storage = GLES3::TextureStorage::get_singleton();
 	GLES3::MaterialStorage *material_storage = GLES3::MaterialStorage::get_singleton();
 	GLES3::MeshStorage *mesh_storage = GLES3::MeshStorage::get_singleton();
@@ -352,6 +353,7 @@ void RasterizerCanvasGLES3::canvas_render_items(RID p_to_render_target, Item *p_
 
 		state_buffer.time = state.time;
 		state_buffer.use_pixel_snap = p_snap_2d_vertices_to_pixel;
+		state_buffer.pad1 = RendererSnap2D::use_gpu_transform_snap(p_snap_2d_transforms_to_pixel, (RendererSnap2D::TransformSnapMethod)p_snap_2d_transforms_method) ? 1 : 0;
 
 		state_buffer.directional_light_count = directional_light_count;
 

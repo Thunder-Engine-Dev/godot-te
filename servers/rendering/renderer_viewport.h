@@ -33,6 +33,7 @@
 #include "core/templates/rid_owner.h"
 #include "servers/display/display_server_enums.h"
 #include "servers/rendering/renderer_scene_render.h"
+#include "servers/rendering/renderer_snap_2d.h"
 #include "servers/rendering/rendering_server_enums.h"
 #include "servers/rendering/rendering_server_types.h"
 #include "servers/rendering/storage/render_scene_buffers.h"
@@ -91,6 +92,7 @@ public:
 
 		bool snap_2d_transforms_to_pixel = false;
 		bool snap_2d_vertices_to_pixel = false;
+		uint8_t snap_2d_transforms_method = RendererSnap2D::TRANSFORM_SNAP_CPU;
 
 		uint64_t time_cpu_begin;
 		uint64_t time_cpu_end;
@@ -174,6 +176,7 @@ public:
 
 			snap_2d_transforms_to_pixel = false;
 			snap_2d_vertices_to_pixel = false;
+			snap_2d_transforms_method = RendererSnap2D::TRANSFORM_SNAP_CPU;
 
 			use_xr = false;
 			sdf_active = false;
@@ -294,6 +297,8 @@ public:
 	float viewport_get_measured_render_time_gpu(RID p_viewport) const;
 
 	void viewport_set_snap_2d_transforms_to_pixel(RID p_viewport, bool p_enabled);
+	void viewport_set_snap_2d_transforms_method(RID p_viewport, int p_method);
+	RendererSnap2D::TransformSnapMethod viewport_get_snap_2d_transforms_method(RID p_viewport) const;
 	void viewport_set_snap_2d_vertices_to_pixel(RID p_viewport, bool p_enabled);
 
 	void viewport_set_default_canvas_item_texture_filter(RID p_viewport, RSE::CanvasItemTextureFilter p_filter);

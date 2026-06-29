@@ -267,6 +267,14 @@ void main() {
 
 	vertex = (canvas_transform * vec4(vertex, 0.0, 1.0)).xy;
 
+	if ((pad1 & 1u) != 0u) {
+		vec2 transform_origin = (canvas_transform * model_matrix * vec4(0.0, 0.0, 0.0, 1.0)).xy;
+		vec2 snapped_origin = floor(transform_origin + vec2(0.5));
+		vertex += snapped_origin - transform_origin;
+		// Precision issue on some hardware creates artifacts within texture.
+		uv += 1e-5;
+	}
+
 	if (use_pixel_snap) {
 		vertex = floor(vertex + 0.5);
 		// precision issue on some hardware creates artifacts within texture

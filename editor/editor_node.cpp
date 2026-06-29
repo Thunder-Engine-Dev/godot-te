@@ -537,6 +537,8 @@ void EditorNode::_update_from_settings() {
 
 	bool snap_2d_transforms = GLOBAL_GET("rendering/2d/snap/snap_2d_transforms_to_pixel");
 	scene_root->set_snap_2d_transforms_to_pixel(snap_2d_transforms);
+	int snap_2d_transforms_method = GLOBAL_GET("rendering/2d/snap/snap_2d_transforms_method");
+	scene_root->set_snap_2d_transforms_method(Viewport::Snap2DTransformsMethod(snap_2d_transforms_method));
 	bool snap_2d_vertices = GLOBAL_GET("rendering/2d/snap/snap_2d_vertices_to_pixel");
 	scene_root->set_snap_2d_vertices_to_pixel(snap_2d_vertices);
 

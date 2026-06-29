@@ -448,6 +448,11 @@
 		<member name="snap_2d_transforms_to_pixel" type="bool" setter="set_snap_2d_transforms_to_pixel" getter="is_snap_2d_transforms_to_pixel_enabled" default="false">
 			If [code]true[/code], [CanvasItem] nodes will internally snap to full pixels. Their position can still be sub-pixel, but the decimals will not have effect. This can lead to a crisper appearance at the cost of less smooth movement, especially when [Camera2D] smoothing is enabled.
 		</member>
+		<member name="snap_2d_transforms_method" type="int" setter="set_snap_2d_transforms_method" getter="get_snap_2d_transforms_method" enum="Viewport.Snap2DTransformsMethod" default="0">
+			Selects how [member snap_2d_transforms_to_pixel] is applied when enabled.
+			[b]CPU (Default):[/b] Snaps canvas item and viewport transforms on the CPU using the 4.4+ rounding rules.
+			[b]GPU:[/b] Snaps only the transform origin on the GPU before the camera transform is applied, similar to Godot 3.x [code]use_gpu_pixel_snap[/code]. Recommended for pixel art games with moving platforms and physics interpolation. Does not snap individual vertex corners (unlike [member snap_2d_vertices_to_pixel]), so sprite sizes remain stable.
+		</member>
 		<member name="snap_2d_vertices_to_pixel" type="bool" setter="set_snap_2d_vertices_to_pixel" getter="is_snap_2d_vertices_to_pixel_enabled" default="false">
 			If [code]true[/code], vertices of [CanvasItem] nodes will snap to full pixels. Only affects the final vertex positions, not the transforms. This can lead to a crisper appearance at the cost of less smooth movement, especially when [Camera2D] smoothing is enabled.
 		</member>

@@ -3940,6 +3940,22 @@ bool Viewport::is_snap_2d_transforms_to_pixel_enabled() const {
 	return snap_2d_transforms_to_pixel;
 }
 
+void Viewport::set_snap_2d_transforms_method(Snap2DTransformsMethod p_method) {
+	ERR_MAIN_THREAD_GUARD;
+	snap_2d_transforms_method = p_method;
+	RS::get_singleton()->viewport_set_snap_2d_transforms_method(viewport, p_method);
+}
+
+Viewport::Snap2DTransformsMethod Viewport::get_snap_2d_transforms_method() const {
+	ERR_READ_THREAD_GUARD_V(SNAP_2D_TRANSFORMS_METHOD_CPU);
+	return snap_2d_transforms_method;
+}
+
+bool Viewport::is_snap_2d_transforms_to_pixel_cpu_enabled() const {
+	ERR_READ_THREAD_GUARD_V(false);
+	return snap_2d_transforms_to_pixel && snap_2d_transforms_method == SNAP_2D_TRANSFORMS_METHOD_CPU;
+}
+
 void Viewport::set_snap_2d_vertices_to_pixel(bool p_enable) {
 	ERR_MAIN_THREAD_GUARD;
 	snap_2d_vertices_to_pixel = p_enable;
@@ -5249,6 +5265,8 @@ void Viewport::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("set_snap_2d_transforms_to_pixel", "enabled"), &Viewport::set_snap_2d_transforms_to_pixel);
 	ClassDB::bind_method(D_METHOD("is_snap_2d_transforms_to_pixel_enabled"), &Viewport::is_snap_2d_transforms_to_pixel_enabled);
+	ClassDB::bind_method(D_METHOD("set_snap_2d_transforms_method", "method"), &Viewport::set_snap_2d_transforms_method);
+	ClassDB::bind_method(D_METHOD("get_snap_2d_transforms_method"), &Viewport::get_snap_2d_transforms_method);
 
 	ClassDB::bind_method(D_METHOD("set_snap_2d_vertices_to_pixel", "enabled"), &Viewport::set_snap_2d_vertices_to_pixel);
 	ClassDB::bind_method(D_METHOD("is_snap_2d_vertices_to_pixel_enabled"), &Viewport::is_snap_2d_vertices_to_pixel_enabled);
@@ -5355,6 +5373,7 @@ void Viewport::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "transparent_bg"), "set_transparent_background", "has_transparent_background");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "handle_input_locally"), "set_handle_input_locally", "is_handling_input_locally");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "snap_2d_transforms_to_pixel"), "set_snap_2d_transforms_to_pixel", "is_snap_2d_transforms_to_pixel_enabled");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "snap_2d_transforms_method", PROPERTY_HINT_ENUM, "CPU (Default),GPU"), "set_snap_2d_transforms_method", "get_snap_2d_transforms_method");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "snap_2d_vertices_to_pixel"), "set_snap_2d_vertices_to_pixel", "is_snap_2d_vertices_to_pixel_enabled");
 	ADD_GROUP("Rendering", "");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "msaa_2d", PROPERTY_HINT_ENUM, String::utf8("Disabled (Fastest),2× (Average),4× (Slow),8× (Slowest)")), "set_msaa_2d", "get_msaa_2d");
@@ -5452,6 +5471,9 @@ void Viewport::_bind_methods() {
 	BIND_ENUM_CONSTANT(SCREEN_SPACE_AA_FXAA);
 	BIND_ENUM_CONSTANT(SCREEN_SPACE_AA_SMAA);
 	BIND_ENUM_CONSTANT(SCREEN_SPACE_AA_MAX);
+
+	BIND_ENUM_CONSTANT(SNAP_2D_TRANSFORMS_METHOD_CPU);
+	BIND_ENUM_CONSTANT(SNAP_2D_TRANSFORMS_METHOD_GPU);
 
 	BIND_ENUM_CONSTANT(RENDER_INFO_OBJECTS_IN_FRAME);
 	BIND_ENUM_CONSTANT(RENDER_INFO_PRIMITIVES_IN_FRAME);

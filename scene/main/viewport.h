@@ -143,6 +143,11 @@ public:
 		SCREEN_SPACE_AA_MAX
 	};
 
+	enum Snap2DTransformsMethod {
+		SNAP_2D_TRANSFORMS_METHOD_CPU,
+		SNAP_2D_TRANSFORMS_METHOD_GPU,
+	};
+
 	enum RenderInfo {
 		RENDER_INFO_OBJECTS_IN_FRAME,
 		RENDER_INFO_PRIMITIVES_IN_FRAME,
@@ -274,6 +279,7 @@ private:
 	bool snap_controls_to_pixels = true;
 	bool snap_2d_transforms_to_pixel = false;
 	bool snap_2d_vertices_to_pixel = false;
+	Snap2DTransformsMethod snap_2d_transforms_method = SNAP_2D_TRANSFORMS_METHOD_CPU;
 
 #if !defined(PHYSICS_2D_DISABLED) || !defined(PHYSICS_3D_DISABLED)
 	bool physics_object_picking = false;
@@ -680,6 +686,9 @@ public:
 
 	void set_snap_2d_transforms_to_pixel(bool p_enable);
 	bool is_snap_2d_transforms_to_pixel_enabled() const;
+	void set_snap_2d_transforms_method(Snap2DTransformsMethod p_method);
+	Snap2DTransformsMethod get_snap_2d_transforms_method() const;
+	bool is_snap_2d_transforms_to_pixel_cpu_enabled() const;
 
 	void set_snap_2d_vertices_to_pixel(bool p_enable);
 	bool is_snap_2d_vertices_to_pixel_enabled() const;
@@ -962,6 +971,7 @@ VARIANT_ENUM_CAST(Viewport::PositionalShadowAtlasQuadrantSubdiv);
 VARIANT_ENUM_CAST(Viewport::MSAA);
 VARIANT_ENUM_CAST(Viewport::AnisotropicFiltering);
 VARIANT_ENUM_CAST(Viewport::ScreenSpaceAA);
+VARIANT_ENUM_CAST(Viewport::Snap2DTransformsMethod);
 VARIANT_ENUM_CAST(Viewport::DebugDraw);
 VARIANT_ENUM_CAST(Viewport::SDFScale);
 VARIANT_ENUM_CAST(Viewport::SDFOversize);

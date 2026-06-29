@@ -42,6 +42,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/rendering_server_default.h"
+#include "servers/rendering/renderer_snap_2d.h"
 
 void RendererCanvasRenderRD::_update_transform_2d_to_mat4(const Transform2D &p_transform, float *p_mat4) {
 	p_mat4[0] = p_transform.columns[0][0];
@@ -506,7 +507,7 @@ RID RendererCanvasRenderRD::_get_pipeline_specialization_or_ubershader(CanvasSha
 	return RID();
 }
 
-void RendererCanvasRenderRD::canvas_render_items(RID p_to_render_target, Item *p_item_list, const Color &p_modulate, Light *p_light_list, Light *p_directional_light_list, const Transform2D &p_canvas_transform, RSE::CanvasItemTextureFilter p_default_filter, RSE::CanvasItemTextureRepeat p_default_repeat, bool p_snap_2d_vertices_to_pixel, bool &r_sdf_used, RenderingServerTypes::RenderInfo *r_render_info) {
+void RendererCanvasRenderRD::canvas_render_items(RID p_to_render_target, Item *p_item_list, const Color &p_modulate, Light *p_light_list, Light *p_directional_light_list, const Transform2D &p_canvas_transform, RSE::CanvasItemTextureFilter p_default_filter, RSE::CanvasItemTextureRepeat p_default_repeat, bool p_snap_2d_transforms_to_pixel, bool p_snap_2d_vertices_to_pixel, uint8_t p_snap_2d_transforms_method, bool &r_sdf_used, RenderingServerTypes::RenderInfo *r_render_info) {
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
@@ -705,6 +706,12 @@ void RendererCanvasRenderRD::canvas_render_items(RID p_to_render_target, Item *p
 		state_buffer.time = state.time;
 		state_buffer.use_pixel_snap = p_snap_2d_vertices_to_pixel;
 
+		uint32_t canvas_flags = use_linear_colors ? CANVAS_FLAGS_CONVERT_ATTRIBUTES_TO_LINEAR : 0;
+		if (RendererSnap2D::use_gpu_transform_snap(p_snap_2d_transforms_to_pixel, (RendererSnap2D::TransformSnapMethod)p_snap_2d_transforms_method)) {
+			canvas_flags |= CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP;
+		}
+		state_buffer.flags = canvas_flags;
+
 		state_buffer.directional_light_count = directional_light_count;
 
 		Vector2 canvas_scale = p_canvas_transform.get_scale();
@@ -726,8 +733,6 @@ void RendererCanvasRenderRD::canvas_render_items(RID p_to_render_target, Item *p
 		//print_line("w: " + itos(ssize.width) + " s: " + rtos(canvas_scale));
 		state_buffer.tex_to_sdf = 1.0 / ((canvas_scale.x + canvas_scale.y) * 0.5);
 		state_buffer.shadow_pixel_size = 1.0f / (float)(state.shadow_texture_size);
-
-		state_buffer.flags = use_linear_colors ? CANVAS_FLAGS_CONVERT_ATTRIBUTES_TO_LINEAR : 0;
 
 		RD::get_singleton()->buffer_update(state.canvas_state_buffer, 0, sizeof(State::Buffer), &state_buffer);
 	}

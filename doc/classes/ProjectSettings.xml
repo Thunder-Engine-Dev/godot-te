@@ -2849,6 +2849,13 @@
 			[b]Note:[/b] This property is only read when the project starts. To toggle 2D transform snapping at runtime, use [method RenderingServer.viewport_set_snap_2d_transforms_to_pixel] on the root [Viewport] instead.
 			[b]Note:[/b] [Control] nodes are snapped to the nearest pixel by default. This is controlled by [member gui/common/snap_controls_to_pixels].
 			[b]Note:[/b] It is not recommended to use this setting together with [member rendering/2d/snap/snap_2d_vertices_to_pixel], as movement may appear even less smooth. Prefer only enabling this setting instead.
+			[b]Note:[/b] See [member rendering/2d/snap/snap_2d_transforms_method] to choose between CPU and GPU snapping methods. The same option is available per [Viewport] as [member Viewport.snap_2d_transforms_method].
+		</member>
+		<member name="rendering/2d/snap/snap_2d_transforms_method" type="int" setter="" getter="" default="0">
+			Selects how [member rendering/2d/snap/snap_2d_transforms_to_pixel] is applied when enabled on the root [Viewport] at project startup.
+			[b]CPU (Default):[/b] Snaps canvas item and viewport transforms on the CPU using the 4.4+ rounding rules. This can cause 1-pixel jitter when combined with physics interpolation and scrolling cameras.
+			[b]GPU:[/b] Snaps only the transform origin on the GPU before the camera transform is applied, similar to Godot 3.x [code]use_gpu_pixel_snap[/code]. Recommended for pixel art games with moving platforms and physics interpolation. Does not snap individual vertex corners (unlike [member rendering/2d/snap/snap_2d_vertices_to_pixel]), so sprite sizes remain stable.
+			[b]Note:[/b] This property is only read when the project starts and applies to the root [Viewport]. For [SubViewport] nodes, use [member Viewport.snap_2d_transforms_method] instead.
 		</member>
 		<member name="rendering/2d/snap/snap_2d_vertices_to_pixel" type="bool" setter="" getter="" default="false">
 			If [code]true[/code], vertices of [CanvasItem] nodes will snap to full pixels. Useful for low-resolution pixel art games. Only affects the final vertex positions, not the transforms. This can lead to a crisper appearance at the cost of less smooth movement, especially when [Camera2D] smoothing is enabled.

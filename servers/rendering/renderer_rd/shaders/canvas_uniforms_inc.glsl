@@ -112,6 +112,7 @@ bool sc_use_lcd() {
 /* SET0: Globals */
 
 #define CANVAS_FLAGS_CONVERT_ATTRIBUTES_TO_LINEAR (1 << 0)
+#define CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP (1 << 1)
 
 // The values passed per draw primitives are cached within it
 

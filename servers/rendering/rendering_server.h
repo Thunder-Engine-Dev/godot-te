@@ -574,6 +574,7 @@ public:
 	virtual void viewport_set_use_hdr_2d(RID p_viewport, bool p_use_hdr) = 0;
 	virtual bool viewport_is_using_hdr_2d(RID p_viewport) const = 0;
 	virtual void viewport_set_snap_2d_transforms_to_pixel(RID p_viewport, bool p_enabled) = 0;
+	virtual void viewport_set_snap_2d_transforms_method(RID p_viewport, int p_method) = 0;
 	virtual void viewport_set_snap_2d_vertices_to_pixel(RID p_viewport, bool p_enabled) = 0;
 
 	virtual void viewport_set_default_canvas_item_texture_filter(RID p_viewport, RSE::CanvasItemTextureFilter p_filter) = 0;

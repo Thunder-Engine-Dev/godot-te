@@ -30,6 +30,8 @@
 
 #include "renderer_viewport.h"
 
+#include "renderer_snap_2d.h"
+
 #include "core/config/engine.h"
 #include "core/config/project_settings.h"
 #include "core/math/transform_interpolator.h"
@@ -54,7 +56,7 @@ static Transform2D _canvas_get_transform(RendererViewport::Viewport *p_viewport,
 	Transform2D xf = p_viewport->global_transform;
 
 	Vector2 pixel_snap_offset;
-	if (p_viewport->snap_2d_transforms_to_pixel) {
+	if (RendererSnap2D::use_cpu_transform_snap(p_viewport->snap_2d_transforms_to_pixel, (RendererSnap2D::TransformSnapMethod)p_viewport->snap_2d_transforms_method)) {
 		// We use `floor(p + 0.5)` to snap canvas items, but `ceil(p - 0.5)`
 		// to snap viewport transform because the viewport transform is inverse
 		// to the camera transform. Also, if the viewport size is not divisible
@@ -65,9 +67,10 @@ static Transform2D _canvas_get_transform(RendererViewport::Viewport *p_viewport,
 	}
 
 	float scale = 1.0;
+	const bool cpu_transform_snap = RendererSnap2D::use_cpu_transform_snap(p_viewport->snap_2d_transforms_to_pixel, (RendererSnap2D::TransformSnapMethod)p_viewport->snap_2d_transforms_method);
 	if (p_viewport->canvas_map.has(p_canvas->parent)) {
 		Transform2D c_xform = p_viewport->canvas_map[p_canvas->parent].transform;
-		if (p_viewport->snap_2d_transforms_to_pixel) {
+		if (cpu_transform_snap) {
 			c_xform.columns[2] = (c_xform.columns[2] * p_canvas->parent_scale + pixel_snap_offset).ceil() / p_canvas->parent_scale;
 		}
 		xf = xf * c_xform;
@@ -75,7 +78,7 @@ static Transform2D _canvas_get_transform(RendererViewport::Viewport *p_viewport,
 	}
 
 	Transform2D c_xform = p_canvas_data->transform;
-	if (p_viewport->snap_2d_transforms_to_pixel) {
+	if (cpu_transform_snap) {
 		c_xform.columns[2] = (c_xform.columns[2] + pixel_snap_offset).ceil();
 	}
 	xf = xf * c_xform;
@@ -711,7 +714,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 
 			RENDER_TIMESTAMP("> Render Canvas " + itos(canvas_idx));
 
-			RSG::canvas->render_canvas(p_viewport->render_target, canvas, xform, canvas_lights, canvas_directional_lights, clip_rect, p_viewport->texture_filter, p_viewport->texture_repeat, p_viewport->snap_2d_transforms_to_pixel, p_viewport->snap_2d_vertices_to_pixel, p_viewport->canvas_cull_mask, &p_viewport->render_info);
+			RSG::canvas->render_canvas(p_viewport->render_target, canvas, xform, canvas_lights, canvas_directional_lights, clip_rect, p_viewport->texture_filter, p_viewport->texture_repeat, p_viewport->snap_2d_transforms_to_pixel, p_viewport->snap_2d_vertices_to_pixel, p_viewport->snap_2d_transforms_method, p_viewport->canvas_cull_mask, &p_viewport->render_info);
 
 			RENDER_TIMESTAMP("< Render Canvas " + itos(canvas_idx));
 
@@ -1593,6 +1596,19 @@ void RendererViewport::viewport_set_snap_2d_transforms_to_pixel(RID p_viewport, 
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
 	viewport->snap_2d_transforms_to_pixel = p_enabled;
+}
+
+void RendererViewport::viewport_set_snap_2d_transforms_method(RID p_viewport, int p_method) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+	ERR_FAIL_COND(p_method < RendererSnap2D::TRANSFORM_SNAP_CPU || p_method > RendererSnap2D::TRANSFORM_SNAP_GPU);
+	viewport->snap_2d_transforms_method = p_method;
+}
+
+RendererSnap2D::TransformSnapMethod RendererViewport::viewport_get_snap_2d_transforms_method(RID p_viewport) const {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL_V(viewport, RendererSnap2D::TRANSFORM_SNAP_CPU);
+	return (RendererSnap2D::TransformSnapMethod)viewport->snap_2d_transforms_method;
 }
 
 void RendererViewport::viewport_set_snap_2d_vertices_to_pixel(RID p_viewport, bool p_enabled) {
