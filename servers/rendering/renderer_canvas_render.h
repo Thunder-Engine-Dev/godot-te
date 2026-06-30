@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "servers/rendering/renderer_snap_2d.h"
 #include "servers/rendering/rendering_server_enums.h"
 #include "servers/rendering/rendering_server_types.h"
 
@@ -369,6 +370,10 @@ public:
 		Point2 repeat_size;
 		int repeat_times = 1;
 		Item *repeat_source_item = nullptr;
+
+		uint8_t snap_2d_transforms_mode = RendererSnap2D::SNAP_2D_TRANSFORMS_ITEM_INHERIT;
+		bool use_canvas_transform_snap = false;
+		bool skip_screen_transform_snap = false;
 
 		Rect2 global_rect_cache;
 

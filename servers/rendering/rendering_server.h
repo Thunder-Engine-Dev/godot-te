@@ -802,6 +802,7 @@ public:
 
 	virtual void canvas_item_set_default_texture_filter(RID p_item, RSE::CanvasItemTextureFilter p_filter) = 0;
 	virtual void canvas_item_set_default_texture_repeat(RID p_item, RSE::CanvasItemTextureRepeat p_repeat) = 0;
+	virtual void canvas_item_set_snap_2d_transforms_mode(RID p_item, int p_mode) = 0;
 
 	virtual void canvas_item_set_visible(RID p_item, bool p_visible) = 0;
 	virtual void canvas_item_set_light_mask(RID p_item, int p_mask) = 0;

@@ -1007,6 +1007,7 @@ public:
 
 	FUNC2(canvas_item_set_default_texture_filter, RID, RSE::CanvasItemTextureFilter)
 	FUNC2(canvas_item_set_default_texture_repeat, RID, RSE::CanvasItemTextureRepeat)
+	FUNC2(canvas_item_set_snap_2d_transforms_mode, RID, int)
 
 	FUNC2(canvas_item_set_visible, RID, bool)
 	FUNC2(canvas_item_set_light_mask, RID, int)

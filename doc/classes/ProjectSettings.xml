@@ -2845,16 +2845,16 @@
 			[b]Note:[/b] This property is only read when the project starts. To change the 2D shadow atlas size at runtime, use [method RenderingServer.canvas_set_shadow_texture_size] instead.
 		</member>
 		<member name="rendering/2d/snap/snap_2d_transforms_to_pixel" type="bool" setter="" getter="" default="false">
-			If [code]true[/code], [CanvasItem] nodes will internally snap to full pixels. Useful for low-resolution pixel art games. Their position can still be sub-pixel, but the decimals will not have effect as the position is rounded. This can lead to a crisper appearance at the cost of less smooth movement, especially when [Camera2D] smoothing is enabled.
+			If [code]true[/code], [CanvasItem] transform origins are aligned to the pixel grid when rendered. Useful for low-resolution pixel art. Node positions may remain sub-pixel in the scene tree, but fractional offsets do not affect the final draw position. This improves crispness at the cost of less smooth motion, especially with [Camera2D] smoothing enabled.
 			[b]Note:[/b] This property is only read when the project starts. To toggle 2D transform snapping at runtime, use [method RenderingServer.viewport_set_snap_2d_transforms_to_pixel] on the root [Viewport] instead.
 			[b]Note:[/b] [Control] nodes are snapped to the nearest pixel by default. This is controlled by [member gui/common/snap_controls_to_pixels].
 			[b]Note:[/b] It is not recommended to use this setting together with [member rendering/2d/snap/snap_2d_vertices_to_pixel], as movement may appear even less smooth. Prefer only enabling this setting instead.
-			[b]Note:[/b] See [member rendering/2d/snap/snap_2d_transforms_method] to choose between CPU and GPU snapping methods. The same option is available per [Viewport] as [member Viewport.snap_2d_transforms_method].
+			[b]Note:[/b] See [member rendering/2d/snap/snap_2d_transforms_method] to choose between canvas space and screen space rounding. The same option is available per [Viewport] as [member Viewport.snap_2d_transforms_method].
 		</member>
 		<member name="rendering/2d/snap/snap_2d_transforms_method" type="int" setter="" getter="" default="0">
-			Selects how [member rendering/2d/snap/snap_2d_transforms_to_pixel] is applied when enabled on the root [Viewport] at project startup.
-			[b]CPU (Default):[/b] Snaps canvas item and viewport transforms on the CPU using the 4.4+ rounding rules. This can cause 1-pixel jitter when combined with physics interpolation and scrolling cameras.
-			[b]GPU:[/b] Snaps only the transform origin on the GPU before the camera transform is applied, similar to Godot 3.x [code]use_gpu_pixel_snap[/code]. Recommended for pixel art games with moving platforms and physics interpolation. Does not snap individual vertex corners (unlike [member rendering/2d/snap/snap_2d_vertices_to_pixel]), so sprite sizes remain stable.
+			Selects how [member rendering/2d/snap/snap_2d_transforms_to_pixel] rounds transform origins when enabled on the root [Viewport] at project startup.
+			[b]Canvas Space (Default):[/b] Rounds origins in canvas space on the CPU, including the viewport transform. Motion is quantized in world space, which can introduce one-pixel variation with physics interpolation or scrolling cameras.
+			[b]Screen Space:[/b] Rounds origins in screen space on the GPU after the canvas transform is applied. Sub-pixel motion is preserved in canvas space while the rendered output stays on the pixel grid. Recommended for pixel art with moving platforms and physics interpolation. Per-item canvas space rounding is available through [member CanvasItem.snap_2d_transforms_mode].
 			[b]Note:[/b] This property is only read when the project starts and applies to the root [Viewport]. For [SubViewport] nodes, use [member Viewport.snap_2d_transforms_method] instead.
 		</member>
 		<member name="rendering/2d/snap/snap_2d_vertices_to_pixel" type="bool" setter="" getter="" default="false">

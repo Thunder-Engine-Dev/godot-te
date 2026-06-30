@@ -144,8 +144,8 @@ public:
 	};
 
 	enum Snap2DTransformsMethod {
-		SNAP_2D_TRANSFORMS_METHOD_CPU,
-		SNAP_2D_TRANSFORMS_METHOD_GPU,
+		SNAP_2D_TRANSFORMS_METHOD_CANVAS = 0,
+		SNAP_2D_TRANSFORMS_METHOD_SCREEN = 1,
 	};
 
 	enum RenderInfo {
@@ -279,7 +279,7 @@ private:
 	bool snap_controls_to_pixels = true;
 	bool snap_2d_transforms_to_pixel = false;
 	bool snap_2d_vertices_to_pixel = false;
-	Snap2DTransformsMethod snap_2d_transforms_method = SNAP_2D_TRANSFORMS_METHOD_CPU;
+	Snap2DTransformsMethod snap_2d_transforms_method = SNAP_2D_TRANSFORMS_METHOD_CANVAS;
 
 #if !defined(PHYSICS_2D_DISABLED) || !defined(PHYSICS_3D_DISABLED)
 	bool physics_object_picking = false;
@@ -688,7 +688,8 @@ public:
 	bool is_snap_2d_transforms_to_pixel_enabled() const;
 	void set_snap_2d_transforms_method(Snap2DTransformsMethod p_method);
 	Snap2DTransformsMethod get_snap_2d_transforms_method() const;
-	bool is_snap_2d_transforms_to_pixel_cpu_enabled() const;
+	bool is_snap_2d_transforms_to_pixel_canvas_enabled() const;
+	bool is_snap_2d_transforms_to_pixel_screen_enabled() const;
 
 	void set_snap_2d_vertices_to_pixel(bool p_enable);
 	bool is_snap_2d_vertices_to_pixel_enabled() const;

@@ -35,15 +35,20 @@
 class RendererSnap2D {
 public:
 	enum TransformSnapMethod : uint8_t {
-		TRANSFORM_SNAP_CPU = 0,
-		TRANSFORM_SNAP_GPU = 1,
+		TRANSFORM_SNAP_CANVAS = 0,
+		TRANSFORM_SNAP_SCREEN = 1,
 	};
 
-	static bool use_cpu_transform_snap(bool p_snap_2d_transforms_to_pixel, TransformSnapMethod p_method) {
-		return p_snap_2d_transforms_to_pixel && p_method == TRANSFORM_SNAP_CPU;
+	enum Snap2DTransformsItemMode : uint8_t {
+		SNAP_2D_TRANSFORMS_ITEM_INHERIT = 0,
+		SNAP_2D_TRANSFORMS_ITEM_CANVAS = 1,
+	};
+
+	static bool use_canvas_transform_snap(bool p_snap_2d_transforms_to_pixel, TransformSnapMethod p_method) {
+		return p_snap_2d_transforms_to_pixel && p_method == TRANSFORM_SNAP_CANVAS;
 	}
 
-	static bool use_gpu_transform_snap(bool p_snap_2d_transforms_to_pixel, TransformSnapMethod p_method) {
-		return p_snap_2d_transforms_to_pixel && p_method == TRANSFORM_SNAP_GPU;
+	static bool use_screen_transform_snap(bool p_snap_2d_transforms_to_pixel, TransformSnapMethod p_method) {
+		return p_snap_2d_transforms_to_pixel && p_method == TRANSFORM_SNAP_SCREEN;
 	}
 };

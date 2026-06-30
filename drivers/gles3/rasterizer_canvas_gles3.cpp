@@ -353,7 +353,7 @@ void RasterizerCanvasGLES3::canvas_render_items(RID p_to_render_target, Item *p_
 
 		state_buffer.time = state.time;
 		state_buffer.use_pixel_snap = p_snap_2d_vertices_to_pixel;
-		state_buffer.pad1 = RendererSnap2D::use_gpu_transform_snap(p_snap_2d_transforms_to_pixel, (RendererSnap2D::TransformSnapMethod)p_snap_2d_transforms_method) ? 1 : 0;
+		state_buffer.pad1 = RendererSnap2D::use_screen_transform_snap(p_snap_2d_transforms_to_pixel, (RendererSnap2D::TransformSnapMethod)p_snap_2d_transforms_method) ? 1 : 0;
 
 		state_buffer.directional_light_count = directional_light_count;
 
@@ -868,6 +868,10 @@ void RasterizerCanvasGLES3::_record_item_commands(const Item *p_item, RID p_rend
 
 		base_flags |= light_count << INSTANCE_FLAGS_LIGHT_COUNT_SHIFT;
 		base_flags |= shadow_mask << INSTANCE_FLAGS_SHADOW_MASKED_SHIFT;
+	}
+
+	if (p_item->skip_screen_transform_snap) {
+		base_flags |= INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP;
 	}
 
 	bool lights_disabled = light_count == 0 && !state.using_directional_lights;

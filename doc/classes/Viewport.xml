@@ -446,12 +446,12 @@
 			The resolution scale to use for the 2D signed distance field. Higher values lead to a more precise and more stable signed distance field as the camera moves, at the cost of performance.
 		</member>
 		<member name="snap_2d_transforms_to_pixel" type="bool" setter="set_snap_2d_transforms_to_pixel" getter="is_snap_2d_transforms_to_pixel_enabled" default="false">
-			If [code]true[/code], [CanvasItem] nodes will internally snap to full pixels. Their position can still be sub-pixel, but the decimals will not have effect. This can lead to a crisper appearance at the cost of less smooth movement, especially when [Camera2D] smoothing is enabled.
+			If [code]true[/code], [CanvasItem] transform origins are aligned to the pixel grid when rendered. Node positions may remain sub-pixel in the scene tree, but fractional offsets do not affect the final draw position. This improves crispness for pixel art at the cost of less smooth motion, especially with [Camera2D] smoothing enabled. Use [member snap_2d_transforms_method] to choose between canvas space and screen space rounding.
 		</member>
 		<member name="snap_2d_transforms_method" type="int" setter="set_snap_2d_transforms_method" getter="get_snap_2d_transforms_method" enum="Viewport.Snap2DTransformsMethod" default="0">
-			Selects how [member snap_2d_transforms_to_pixel] is applied when enabled.
-			[b]CPU (Default):[/b] Snaps canvas item and viewport transforms on the CPU using the 4.4+ rounding rules.
-			[b]GPU:[/b] Snaps only the transform origin on the GPU before the camera transform is applied, similar to Godot 3.x [code]use_gpu_pixel_snap[/code]. Recommended for pixel art games with moving platforms and physics interpolation. Does not snap individual vertex corners (unlike [member snap_2d_vertices_to_pixel]), so sprite sizes remain stable.
+			Selects how [member snap_2d_transforms_to_pixel] rounds transform origins when enabled.
+			[b]Canvas Space (Default):[/b] Rounds origins in canvas space on the CPU, including the viewport transform. Motion is quantized in world space, which can introduce one-pixel variation with physics interpolation or scrolling cameras.
+			[b]Screen Space:[/b] Rounds origins in screen space on the GPU after the canvas transform is applied. Sub-pixel motion is preserved in canvas space while the rendered output stays on the pixel grid. Recommended for pixel art with moving platforms and physics interpolation. Per-item canvas space rounding is available through [member CanvasItem.snap_2d_transforms_mode].
 		</member>
 		<member name="snap_2d_vertices_to_pixel" type="bool" setter="set_snap_2d_vertices_to_pixel" getter="is_snap_2d_vertices_to_pixel_enabled" default="false">
 			If [code]true[/code], vertices of [CanvasItem] nodes will snap to full pixels. Only affects the final vertex positions, not the transforms. This can lead to a crisper appearance at the cost of less smooth movement, especially when [Camera2D] smoothing is enabled.
@@ -857,6 +857,12 @@
 		</constant>
 		<constant name="VRS_UPDATE_MAX" value="3" enum="VRSUpdateMode">
 			Represents the size of the [enum VRSUpdateMode] enum.
+		</constant>
+		<constant name="SNAP_2D_TRANSFORMS_METHOD_CANVAS" value="0" enum="Snap2DTransformsMethod">
+			Round transform origins in canvas space on the CPU. Can introduce one-pixel variation when combined with physics interpolation or scrolling cameras.
+		</constant>
+		<constant name="SNAP_2D_TRANSFORMS_METHOD_SCREEN" value="1" enum="Snap2DTransformsMethod">
+			Round transform origins in screen space on the GPU after the canvas transform is applied. Per-item canvas space rounding is available through [member CanvasItem.snap_2d_transforms_mode].
 		</constant>
 	</constants>
 </class>

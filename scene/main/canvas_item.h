@@ -85,6 +85,12 @@ public:
 		OVERSAMPLING_WITH_SCALE_MAX,
 	};
 
+	enum Snap2DTransformsMode {
+		SNAP_2D_TRANSFORMS_MODE_INHERIT,
+		SNAP_2D_TRANSFORMS_MODE_CANVAS,
+		SNAP_2D_TRANSFORMS_MODE_MAX,
+	};
+
 private:
 	mutable SelfList<Node> xform_change;
 
@@ -143,6 +149,7 @@ private:
 	mutable RSE::CanvasItemTextureRepeat texture_repeat_cache = RSE::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED;
 	TextureFilter texture_filter = TEXTURE_FILTER_PARENT_NODE;
 	TextureRepeat texture_repeat = TEXTURE_REPEAT_PARENT_NODE;
+	Snap2DTransformsMode snap_2d_transforms_mode = SNAP_2D_TRANSFORMS_MODE_INHERIT;
 
 	Ref<Material> material;
 	mutable HashMap<StringName, Variant> instance_shader_parameters;
@@ -177,6 +184,7 @@ private:
 	void _update_texture_repeat_changed(bool p_propagate);
 	void _refresh_texture_filter_cache() const;
 	void _update_texture_filter_changed(bool p_propagate);
+	void _update_snap_2d_transforms_mode_changed(bool p_propagate);
 
 	void _notify_transform_deferred();
 	const StringName *_instance_shader_parameter_get_remap(const StringName &p_name) const;
@@ -435,6 +443,10 @@ public:
 	TextureFilter get_texture_filter_in_tree() const;
 	TextureRepeat get_texture_repeat_in_tree() const;
 
+	void set_snap_2d_transforms_mode(Snap2DTransformsMode p_mode);
+	Snap2DTransformsMode get_snap_2d_transforms_mode() const;
+	bool is_snap_2d_transforms_canvas_space_in_tree() const;
+
 	OversamplingWithScale get_oversampling_with_scale() const;
 	void set_oversampling_with_scale(OversamplingWithScale p_mode);
 
@@ -454,6 +466,7 @@ VARIANT_ENUM_CAST(CanvasItem::TextureFilter)
 VARIANT_ENUM_CAST(CanvasItem::TextureRepeat)
 VARIANT_ENUM_CAST(CanvasItem::ClipChildrenMode)
 VARIANT_ENUM_CAST(CanvasItem::OversamplingWithScale)
+VARIANT_ENUM_CAST(CanvasItem::Snap2DTransformsMode)
 
 class CanvasTexture : public Texture2D {
 	GDCLASS(CanvasTexture, Texture2D);

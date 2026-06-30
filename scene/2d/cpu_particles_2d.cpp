@@ -37,6 +37,7 @@
 #include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/2d/gpu_particles_2d.h"
+#include "scene/main/viewport.h"
 #include "scene/main/scene_tree.h"
 #include "scene/resources/atlas_texture.h"
 #include "scene/resources/canvas_item_material.h"
@@ -191,11 +192,16 @@ void CPUParticles2D::_update_mesh_texture() {
 		tex_size = Size2(1, 1);
 	}
 
+	Point2 dest_offset = -tex_size * 0.5;
+	if (is_inside_tree() && get_viewport() && get_viewport()->is_snap_2d_transforms_to_pixel_screen_enabled() && !is_snap_2d_transforms_canvas_space_in_tree()) {
+		dest_offset = (dest_offset + Point2(0.5, 0.5)).floor();
+	}
+
 	Vector<Vector2> vertices = {
-		-tex_size * 0.5,
-		-tex_size * 0.5 + Vector2(tex_size.x, 0),
-		-tex_size * 0.5 + tex_size,
-		-tex_size * 0.5 + Vector2(0, tex_size.y)
+		dest_offset,
+		dest_offset + Vector2(tex_size.x, 0),
+		dest_offset + tex_size,
+		dest_offset + Vector2(0, tex_size.y)
 	};
 
 	Vector<Vector2> uvs;
@@ -1299,6 +1305,8 @@ void CPUParticles2D::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_ENTER_TREE: {
 			set_process_internal(emitting);
+
+			_update_mesh_texture();
 
 			_refresh_interpolation_state();
 

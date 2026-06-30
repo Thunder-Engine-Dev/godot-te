@@ -286,7 +286,7 @@ void main() {
 
 	vertex = (canvas_data.canvas_transform * vec4(vertex, 0.0, 1.0)).xy;
 
-	if (bool(canvas_data.flags & CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP)) {
+	if (bool(canvas_data.flags & CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP) && !bool(read_draw_data_flags & INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP)) {
 		vec2 transform_origin = (canvas_data.canvas_transform * model_matrix * vec4(0.0, 0.0, 0.0, 1.0)).xy;
 		vec2 snapped_origin = floor(transform_origin + vec2(0.5));
 		vertex += snapped_origin - transform_origin;

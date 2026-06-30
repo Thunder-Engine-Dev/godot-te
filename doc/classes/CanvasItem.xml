@@ -685,6 +685,11 @@
 			The repeating mode used to render this [CanvasItem]'s texture(s). It affects what happens when the texture is sampled outside its extents, for example by setting a [member Sprite2D.region_rect] that is larger than the texture or assigning [Polygon2D] UV points outside the texture.
 			[b]Note:[/b] [TextureRect] is not affected by [member texture_repeat], as it uses its own texture repeating implementation.
 		</member>
+		<member name="snap_2d_transforms_mode" type="int" setter="set_snap_2d_transforms_mode" getter="get_snap_2d_transforms_mode" enum="CanvasItem.Snap2DTransformsMode" default="0">
+			Overrides how [member Viewport.snap_2d_transforms_to_pixel] is resolved for this node and its descendants.
+			[b]Inherit:[/b] Use the mode resolved from the parent [CanvasItem], or from the [Viewport] for root items.
+			[b]Canvas Space:[/b] Always round transform origins in canvas space. When the viewport uses screen space snapping, the item is not shifted by the canvas shader in screen space.
+		</member>
 		<member name="top_level" type="bool" setter="set_as_top_level" getter="is_set_as_top_level" default="false">
 			If [code]true[/code], this [CanvasItem] will [i]not[/i] inherit its transform from parent [CanvasItem]s. Its draw order will also be changed to make it draw on top of other [CanvasItem]s that do not have [member top_level] set to [code]true[/code]. The [CanvasItem] will effectively act as if it was placed as a child of a bare [Node].
 		</member>
@@ -829,6 +834,15 @@
 		</constant>
 		<constant name="OVERSAMPLING_WITH_SCALE_MAX" value="3" enum="OversamplingWithScale">
 			Represents the size of the [enum OversamplingWithScale] enum.
+		</constant>
+		<constant name="SNAP_2D_TRANSFORMS_MODE_INHERIT" value="0" enum="Snap2DTransformsMode">
+			Inherit the resolved transform snap mode from the parent [CanvasItem], or from the [Viewport] for root items.
+		</constant>
+		<constant name="SNAP_2D_TRANSFORMS_MODE_CANVAS" value="1" enum="Snap2DTransformsMode">
+			Always round transform origins in canvas space. When the viewport uses screen space snapping, the item is not shifted by the canvas shader in screen space.
+		</constant>
+		<constant name="SNAP_2D_TRANSFORMS_MODE_MAX" value="2" enum="Snap2DTransformsMode">
+			Represents the size of the [enum Snap2DTransformsMode] enum.
 		</constant>
 	</constants>
 </class>

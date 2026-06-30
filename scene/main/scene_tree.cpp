@@ -2140,7 +2140,7 @@ SceneTree::SceneTree() {
 	bool snap_2d_transforms = GLOBAL_DEF_BASIC("rendering/2d/snap/snap_2d_transforms_to_pixel", false);
 	root->set_snap_2d_transforms_to_pixel(snap_2d_transforms);
 
-	int snap_2d_transforms_method = GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/2d/snap/snap_2d_transforms_method", PROPERTY_HINT_ENUM, "CPU (Default),GPU"), 0);
+	int snap_2d_transforms_method = GLOBAL_DEF(PropertyInfo(Variant::INT, "rendering/2d/snap/snap_2d_transforms_method", PROPERTY_HINT_ENUM, "Canvas Space (Default),Screen Space"), 0);
 	root->set_snap_2d_transforms_method(Viewport::Snap2DTransformsMethod(snap_2d_transforms_method));
 
 	bool snap_2d_vertices = GLOBAL_DEF("rendering/2d/snap/snap_2d_vertices_to_pixel", false);

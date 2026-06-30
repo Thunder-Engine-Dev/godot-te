@@ -74,6 +74,7 @@ class RendererCanvasRenderRD : public RendererCanvasRender {
 		INSTANCE_FLAGS_NINEPATCH_V_MODE_SHIFT = 11,
 
 		INSTANCE_FLAGS_SHADOW_MASKED_SHIFT = 13, // 16 bits.
+		INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP = (1 << 29),
 	};
 
 	enum {

@@ -707,7 +707,7 @@ void RendererCanvasRenderRD::canvas_render_items(RID p_to_render_target, Item *p
 		state_buffer.use_pixel_snap = p_snap_2d_vertices_to_pixel;
 
 		uint32_t canvas_flags = use_linear_colors ? CANVAS_FLAGS_CONVERT_ATTRIBUTES_TO_LINEAR : 0;
-		if (RendererSnap2D::use_gpu_transform_snap(p_snap_2d_transforms_to_pixel, (RendererSnap2D::TransformSnapMethod)p_snap_2d_transforms_method)) {
+		if (RendererSnap2D::use_screen_transform_snap(p_snap_2d_transforms_to_pixel, (RendererSnap2D::TransformSnapMethod)p_snap_2d_transforms_method)) {
 			canvas_flags |= CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP;
 		}
 		state_buffer.flags = canvas_flags;
@@ -2393,6 +2393,10 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 
 		template_instance.flags |= light_count << INSTANCE_FLAGS_LIGHT_COUNT_SHIFT;
 		template_instance.flags |= shadow_mask << INSTANCE_FLAGS_SHADOW_MASKED_SHIFT;
+	}
+
+	if (p_item->skip_screen_transform_snap) {
+		template_instance.flags |= INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP;
 	}
 
 	bool use_lighting = (light_count > 0 || using_directional_lights);

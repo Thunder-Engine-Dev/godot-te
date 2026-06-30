@@ -1,52 +1,60 @@
-# Forward-port: GPU 2D transform pixel snap (Godot 4.7+)
+# Forward-port: Screen Space 2D transform pixel snap (Godot 4.7+)
 
-Инструкция для агента/разработчика при переносе патча на новые версии Godot и разрешении merge-конфликтов.
+Guide for developers and agents when forward-porting this patch to newer Godot versions and resolving merge conflicts.
 
-**Базовая версия патча:** Godot 4.7 / 4.7.1-rc  
-**Цель патча:** режим `GPU` для `snap_2d_transforms_to_pixel` — без jitter (как Godot 3.6), без растяжения углов (в отличие от `snap_2d_vertices_to_pixel`).
+**Patch base version:** Godot 4.7 / 4.7.1-rc  
+**Patch goal:** A **Screen Space** mode for `snap_2d_transforms_to_pixel` — no jitter with physics interpolation and scrolling cameras, without corner stretching (unlike `snap_2d_vertices_to_pixel`).
 
 ---
 
-## 1. Краткое описание патча
+## 1. Patch overview
 
-### Проблема upstream (4.4+ CPU snap)
+### Upstream problem (canvas space snap)
 
-- CPU snap на каждом узле иерархии + отдельный snap viewport/camera (`floor` / `ceil`) → ±1 px jitter при physics interpolation + scrolling camera + moving platform.
-- `snap_2d_vertices_to_pixel` убирает jitter, но snap'ит **каждый угол** → иногда ломает длину спрайта.
+- Canvas space rounding on every node in the hierarchy plus a separate viewport/camera snap (`floor` / `ceil`) causes ±1 px jitter with physics interpolation, scrolling cameras, and moving platforms.
+- `snap_2d_vertices_to_pixel` removes jitter but snaps **every corner**, which can distort sprite dimensions.
 
-### Решение патча
+### Patch solution
 
-1. Новый enum **`snap_2d_transforms_method`**: `CPU` (поведение upstream) / `GPU` (новое).
-2. В режиме **GPU**:
-   - CPU snap в `renderer_canvas_cull.cpp` и `renderer_viewport.cpp` **отключён**.
-   - Snap origin в шейдере **после** `canvas_transform` (уже с учётом камеры).
-   - Snap **только origin**, не каждый corner → размер quad сохраняется.
-3. Per-viewport настройка на `Viewport` / `SubViewport` (не только project setting).
-4. Коррекция draw offset в `Sprite2D` / `AnimatedSprite2D` при любом transform snap (не только CPU).
+1. New enum **`snap_2d_transforms_method`**: **Canvas Space** (upstream behavior, int `0`) / **Screen Space** (this patch, int `1`).
+2. In **Screen Space** mode:
+   - Canvas space rounding in `renderer_canvas_cull.cpp` and `renderer_viewport.cpp` is **disabled** (unless overridden per item).
+   - Transform origins are rounded in the shader **after** `canvas_transform` (camera already applied).
+   - Only the **origin** is rounded, not each corner — quad size is preserved.
+3. Per-viewport setting on `Viewport` / `SubViewport` (not only a project setting).
+4. Draw offset correction in `Sprite2D` / `AnimatedSprite2D` / `RichTextLabel` when transform snap is enabled.
+5. Per-item override on `CanvasItem`: **`snap_2d_transforms_mode`** (`Inherit` / **Canvas Space**) to opt into canvas space rounding while the viewport uses screen space snapping.
+6. Particle quad mesh offset correction when screen space snap is active (centered quads).
 
-### Рекомендуемая конфигурация (SubViewport)
+### Recommended configuration (SubViewport)
 
 ```
 snap_2d_transforms_to_pixel = true
-snap_2d_transforms_method = GPU   (Viewport.SNAP_2D_TRANSFORMS_METHOD_GPU)
+snap_2d_transforms_method = Screen Space   (Viewport.SNAP_2D_TRANSFORMS_METHOD_SCREEN)
 snap_2d_vertices_to_pixel = false
+```
+
+Optional per-item opt-in to canvas space rounding (legacy-style behavior for specific nodes):
+
+```
+snap_2d_transforms_mode = Canvas Space   (CanvasItem.SNAP_2D_TRANSFORMS_MODE_CANVAS)
 ```
 
 ---
 
-## 2. Файлы патча
+## 2. Patch files
 
-### Новый файл (обязательно добавить)
+### New file (must be added)
 
-| Файл | Назначение |
-|------|------------|
-| `servers/rendering/renderer_snap_2d.h` | Хелпер `use_cpu_transform_snap` / `use_gpu_transform_snap` |
+| File | Purpose |
+|------|---------|
+| `servers/rendering/renderer_snap_2d.h` | Helpers `use_canvas_transform_snap` / `use_screen_transform_snap` and item mode enum |
 
-### Изменённые файлы (ядро)
+### Modified files (core)
 
-| Область | Файлы |
-|---------|-------|
-| Scene API | `scene/main/viewport.h`, `scene/main/viewport.cpp` |
+| Area | Files |
+|------|-------|
+| Scene API | `scene/main/viewport.h`, `scene/main/viewport.cpp`, `scene/main/canvas_item.h`, `scene/main/canvas_item.cpp` |
 | Project settings | `scene/main/scene_tree.cpp`, `editor/editor_node.cpp` |
 | RenderingServer | `servers/rendering/rendering_server.h`, `.cpp`, `rendering_server_default.h` |
 | Viewport renderer | `servers/rendering/renderer_viewport.h`, `renderer_viewport.cpp` |
@@ -56,291 +64,338 @@ snap_2d_vertices_to_pixel = false
 | GLES3 backend | `drivers/gles3/rasterizer_canvas_gles3.h`, `.cpp` |
 | Dummy backend | `servers/rendering/dummy/rasterizer_canvas_dummy.h` |
 | RD shaders | `servers/rendering/renderer_rd/shaders/canvas.glsl`, `canvas_uniforms_inc.glsl` |
-| GLES3 shaders | `drivers/gles3/shaders/canvas.glsl` |
+| GLES3 shaders | `drivers/gles3/shaders/canvas.glsl`, `canvas_uniforms_inc.glsl` |
 | Scene offsets | `scene/2d/sprite_2d.cpp`, `scene/2d/animated_sprite_2d.cpp`, `scene/gui/rich_text_label.cpp` |
-| Parallax (CPU only) | `scene/2d/parallax_2d.cpp` — workaround только для CPU snap |
-| Docs | `doc/classes/Viewport.xml`, `doc/classes/ProjectSettings.xml` |
+| Particles | `scene/2d/cpu_particles_2d.cpp`, `scene/2d/gpu_particles_2d.cpp` |
+| Parallax (canvas space only) | `scene/2d/parallax_2d.cpp` — offset workaround only for canvas space snap |
+| Docs | `doc/classes/Viewport.xml`, `doc/classes/ProjectSettings.xml`, `doc/classes/CanvasItem.xml` |
 
-### Сгенерированные шейдеры (если есть в репозитории)
+### Generated shaders (if present in the repo)
 
 - `servers/rendering/renderer_rd/shaders/canvas.glsl.gen.h`
 - `servers/rendering/renderer_rd/shaders/canvas_uniforms_inc.glsl.gen.h`
 - `drivers/gles3/shaders/canvas.glsl.gen.h`
 
-> Если upstream перегенерирует `.gen.h` при сборке — править **исходные** `.glsl`, затем пересобрать или синхронизировать `.gen.h` вручную.
+> If upstream regenerates `.gen.h` during the build, edit the source **`.glsl`** files, then rebuild or sync `.gen.h` manually.
 
 ---
 
-## 3. Ключевая логика (не ломать при конфликтах)
+## 3. Core logic (do not break during conflicts)
 
 ### 3.1. `RendererSnap2D` (`renderer_snap_2d.h`)
 
 ```cpp
-enum TransformSnapMethod : uint8_t { TRANSFORM_SNAP_CPU = 0, TRANSFORM_SNAP_GPU = 1 };
+enum TransformSnapMethod : uint8_t {
+    TRANSFORM_SNAP_CANVAS = 0,
+    TRANSFORM_SNAP_SCREEN = 1,
+};
 
-use_cpu_transform_snap(enabled, method)  // CPU path upstream 4.4+
-use_gpu_transform_snap(enabled, method)  // GPU path патча
+enum Snap2DTransformsItemMode : uint8_t {
+    SNAP_2D_TRANSFORMS_ITEM_INHERIT = 0,
+    SNAP_2D_TRANSFORMS_ITEM_CANVAS = 1,
+};
+
+use_canvas_transform_snap(enabled, method)  // Canvas space path (upstream)
+use_screen_transform_snap(enabled, method)  // Screen space path (this patch)
 ```
 
-**Важно:** метод берётся из **viewport** (`snap_2d_transforms_method`), не из `GLOBAL_GET` в runtime.
+**Important:** The viewport method is read from the **viewport** (`snap_2d_transforms_method`), not from `GLOBAL_GET` at runtime.
 
-### 3.2. CPU path (только `method == CPU`)
+### 3.2. Canvas space path (viewport method == Canvas Space, or per-item override)
 
-**`renderer_canvas_cull.cpp`** — snap origin узлов:
+**`renderer_canvas_cull.cpp`** — per-item origin rounding:
 
 ```cpp
-if (snapping_2d_transforms_to_pixel) {
+if (uses_canvas_transform_snap) {
     self_xform.columns[2] = (self_xform.columns[2] + Point2(0.5, 0.5)).floor();
     parent_xform.columns[2] = (parent_xform.columns[2] + Point2(0.5, 0.5)).floor();
 }
 ```
 
-Устанавливать: `snapping_2d_transforms_to_pixel = RendererSnap2D::use_cpu_transform_snap(...)`.
+Resolved per item via `_item_uses_canvas_transform_snap()`:
+- Viewport default: canvas space when `use_canvas_transform_snap(...)`.
+- Item override: `snap_2d_transforms_mode == CANVAS`, or inherited from parent chain.
 
-**`renderer_viewport.cpp`** — `_canvas_get_transform()`: `pixel_snap_offset` + `ceil` на viewport/canvas transform (PR #93786 upstream). Только при `use_cpu_transform_snap`.
+**`renderer_viewport.cpp`** — `_canvas_get_transform()`: `pixel_snap_offset` + `ceil` on viewport/canvas transform. Only when `use_canvas_transform_snap(...)`.
 
-### 3.3. GPU path (шейдер) — критичный порядок
+### 3.3. Screen space path (shader) — critical order
 
-**Неверно** (вызывает jitter): snap origin **до** `canvas_transform` или snap в `model_matrix` space.
+**Wrong** (causes jitter): snap origin **before** `canvas_transform`, or snap in `model_matrix` space only.
 
-**Верно** (текущий патч):
+**Correct** (current patch):
 
 ```glsl
 vertex = (model_matrix * vec4(vertex, 0.0, 1.0)).xy;
-vertex = (canvas_transform * vec4(vertex, 0.0, 1.0)).xy;
+vertex = (canvas_data.canvas_transform * vec4(vertex, 0.0, 1.0)).xy;
 
-// GPU transform snap — только origin, ПОСЛЕ canvas_transform
-if (transform_snap_flag) {
-    vec2 transform_origin = (canvas_transform * model_matrix * vec4(0.0, 0.0, 0.0, 1.0)).xy;
+// Screen space transform snap — origin only, AFTER canvas_transform
+if (bool(canvas_data.flags & CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP)
+        && !bool(read_draw_data_flags & INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP)) {
+    vec2 transform_origin = (canvas_data.canvas_transform * model_matrix * vec4(0.0, 0.0, 0.0, 1.0)).xy;
     vec2 snapped_origin = floor(transform_origin + vec2(0.5));
     vertex += snapped_origin - transform_origin;
     uv += 1e-5;
 }
 
-// Отдельно: snap_2d_vertices_to_pixel (upstream) — floor каждого corner, НЕ смешивать с GPU transform snap
-if (use_pixel_snap) {
+// Separate: snap_2d_vertices_to_pixel (upstream) — floor each corner; do NOT merge with screen space transform snap
+if (canvas_data.use_pixel_snap) {
     vertex = floor(vertex + 0.5);
     uv += 1e-5;
 }
 ```
 
-**RD:** флаг `CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP (1 << 1)` в `canvas_data.flags`.  
-**GLES3:** тот же смысл через `state_buffer.pad1 = 1` (без изменения UBO layout).
+**RD:** flag `CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP (1 << 1)` in `canvas_data.flags`.  
+**GLES3:** same meaning via `state_buffer.pad1 = 1` (without changing UBO layout).
 
-### 3.4. Проброс параметров по цепочке
+**Per-item opt-out of screen space snap:** `INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP (1 << 29)` on instance flags when `Item::skip_screen_transform_snap` is set (canvas space override on a screen space viewport).
 
-Сигнатура `canvas_render_items` получает **дополнительные** аргументы:
+### 3.4. Parameter plumbing
+
+`canvas_render_items` receives an additional argument:
 
 ```cpp
 bool p_snap_2d_transforms_to_pixel,
 bool p_snap_2d_vertices_to_pixel,
-uint8_t p_snap_2d_transforms_method,  // NEW
+uint8_t p_snap_2d_transforms_method,  // NEW — int values unchanged: 0 = Canvas, 1 = Screen
 ```
 
-Цепочка вызовов:
+Call chain:
 
 ```
 RendererViewport (draw)
   → RendererCanvasCull::render_canvas(..., method)
     → _render_canvas_item_tree(..., method)
       → canvas_render_items(..., method)
-        → state: flags / pad1 для GPU snap
+        → state: flags / pad1 for screen space snap
+        → per-item: skip_screen_transform_snap → INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP
 ```
 
-При forward-port искать по строкам: `snap_2d_transforms_method`, `render_canvas`, `canvas_render_items`.
+When forward-porting, search for: `snap_2d_transforms_method`, `render_canvas`, `canvas_render_items`, `skip_screen_transform_snap`.
 
 ### 3.5. Viewport / Scene
 
 **`viewport.h`:**
 
-- Enum `Snap2DTransformsMethod` + `VARIANT_ENUM_CAST(Viewport::Snap2DTransformsMethod);` в конце файла (**обязательно**, иначе C2027 при `BIND_ENUM_CONSTANT`).
-- Поле `snap_2d_transforms_method`.
-- `set/get_snap_2d_transforms_method`, `is_snap_2d_transforms_to_pixel_cpu_enabled()`.
+- Enum `Snap2DTransformsMethod`: `SNAP_2D_TRANSFORMS_METHOD_CANVAS` (0), `SNAP_2D_TRANSFORMS_METHOD_SCREEN` (1).
+- `VARIANT_ENUM_CAST(Viewport::Snap2DTransformsMethod);` at end of file (**required**, otherwise C2027 on `BIND_ENUM_CONSTANT`).
+- `set/get_snap_2d_transforms_method`, `is_snap_2d_transforms_to_pixel_canvas_enabled()`, `is_snap_2d_transforms_to_pixel_screen_enabled()`.
+
+**`canvas_item.h`:**
+
+- Enum `Snap2DTransformsMode`: `SNAP_2D_TRANSFORMS_MODE_INHERIT` (0), `SNAP_2D_TRANSFORMS_MODE_CANVAS` (1).
+- `VARIANT_ENUM_CAST(CanvasItem::Snap2DTransformsMode);`
+- `set/get_snap_2d_transforms_mode`, `is_snap_2d_transforms_canvas_space_in_tree()`.
+- Property `snap_2d_transforms_mode` — **Inherit** / **Canvas Space**; propagates to children with Inherit.
 
 **`RenderingServer`:**
 
-- `viewport_set_snap_2d_transforms_method(RID, int)`.
+- `viewport_set_snap_2d_transforms_method(RID, int)`
+- `canvas_item_set_snap_2d_transforms_mode(RID, int)`
 
-**Parallax2D:** offset workaround — только `is_snap_2d_transforms_to_pixel_cpu_enabled()`, **не** для GPU.
+**Parallax2D:** offset workaround — only `is_snap_2d_transforms_to_pixel_canvas_enabled()`, **not** for screen space.
 
-**Sprite2D / AnimatedSprite2D:** `(offset + 0.5).floor()` при `is_snap_2d_transforms_to_pixel_enabled()` (**CPU и GPU**).
+**Sprite2D / AnimatedSprite2D / RichTextLabel:** `(offset + 0.5).floor()` when `is_snap_2d_transforms_to_pixel_enabled()`.
+
+**CPUParticles2D / GPUParticles2D:** mesh vertex offset `(dest_offset + 0.5).floor()` when screen space snap is active and the item does **not** use canvas space in tree.
 
 ---
 
-## 4. Workflow forward-port на новую версию Godot
+## 4. Forward-port workflow
 
-### Шаг 1 — подготовка
+### Step 1 — Preparation
 
 ```bash
 git fetch origin
-git checkout -b pixel-snap-gpu origin/4.x   # или нужный stable tag
-git log --oneline -1                          # зафиксировать целевую версию
+git checkout -b pixel-snap-screen origin/4.x   # or target stable tag
+git log --oneline -1                            # record target version
 ```
 
-Сохранить патч с базовой версии:
+Save the patch from the base version:
 
 ```bash
-git format-patch <base-commit>..<patch-tip> -o patches/pixel-snap-gpu/
-# или
-git diff <upstream-stable>..<patch-branch> > patches/pixel-snap-gpu.patch
+git format-patch <base-commit>..<patch-tip> -o patches/pixel-snap-screen/
+# or
+git diff <upstream-stable>..<patch-branch> > patches/pixel-snap-screen.patch
 ```
 
-### Шаг 2 — cherry-pick / apply
+### Step 2 — Cherry-pick / apply
 
 ```bash
-git cherry-pick <commit>    # предпочтительно, если есть отдельный commit
-# или
-git apply --3way patches/pixel-snap-gpu.patch
+git cherry-pick <commit>    # preferred if there is a dedicated commit
+# or
+git apply --3way patches/pixel-snap-screen.patch
 ```
 
-### Шаг 3 — разрешение конфликтов
+### Step 3 — Conflict resolution
 
-Использовать **секцию 5** ниже. После каждого блока — `grep` по ключевым символам (секция 6).
+Use **section 5** below. After each block, run `grep` on key symbols (section 6).
 
-### Шаг 4 — проверка целостности
+### Step 4 — Integrity check
 
 ```bash
-rg "snap_2d_transforms_method|CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP|RendererSnap2D" --type-add 'godot:*.{cpp,h,glsl}' -t godot
+rg "snap_2d_transforms_method|CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP|RendererSnap2D|skip_screen_transform_snap" --type-add 'godot:*.{cpp,h,glsl}' -t godot
 rg "canvas_render_items\(" servers/rendering drivers/gles3 -A1
 ```
 
-Убедиться, что **все** реализации `canvas_render_items` имеют одинаковую сигнатуру (RD, GLES3, dummy).
+Ensure **all** `canvas_render_items` implementations share the same signature (RD, GLES3, dummy).
 
-### Шаг 5 — функциональный чеклист
+### Step 5 — Functional checklist
 
-- [ ] SubViewport: `transforms=on`, `method=GPU`, `vertices=off`
-- [ ] Нет ±1 px jitter: игрок на движущейся платформе + camera follow + physics interpolation
-- [ ] Спрайты не растягиваются (в отличие от `vertices=on`)
-- [ ] Centered Sprite2D с нечётным размером — без лишнего blur (offset snap)
-- [ ] CPU mode (`method=CPU`) — поведение как upstream 4.4+ (реgression)
-- [ ] Parallax2D не ломается в GPU mode (workaround не активен)
+- [ ] SubViewport: `snap_2d_transforms_to_pixel = on`, `method = Screen Space`, `vertices = off`
+- [ ] No ±1 px jitter: player on moving platform + camera follow + physics interpolation
+- [ ] Sprites are not stretched (unlike `vertices = on`)
+- [ ] Centered Sprite2D with odd dimensions — no extra blur (offset snap)
+- [ ] Particles — sharp textures in screen space mode (mesh offset)
+- [ ] Canvas Space mode (`method = Canvas Space`) — matches upstream canvas space behavior (regression)
+- [ ] Per-item `snap_2d_transforms_mode = Canvas Space` on screen space viewport — no screen space shader shift
+- [ ] Parallax2D unchanged in screen space mode (workaround inactive)
 
 ---
 
-## 5. Разрешение конфликтов по зонам
+## 5. Conflict resolution by area
 
 ### 5.1. `renderer_viewport.cpp` — `_canvas_get_transform`
 
-Upstream часто меняет camera/viewport rounding (#93786 и последующие fix).
+Upstream often changes camera/viewport rounding.
 
-| При конфликте | Действие |
-|---------------|----------|
-| Upstream добавил новый snap/round | Обернуть **весь** блок в `if (RendererSnap2D::use_cpu_transform_snap(...))` |
-| Upstream переименовал переменные | Сохранить upstream имена, сохранить guard CPU-only |
-| Upstream удалил viewport snap | **Не** восстанавливать для GPU; для CPU — перенести логику из патча |
+| On conflict | Action |
+|-------------|--------|
+| Upstream added new snap/round logic | Wrap the **entire** block in `if (RendererSnap2D::use_canvas_transform_snap(...))` |
+| Upstream renamed variables | Keep upstream names; keep canvas-space-only guard |
+| Upstream removed viewport snap | Do **not** restore it for screen space; for canvas space — port patch logic |
 
-**Нельзя:** применять CPU viewport snap при `method == GPU` — вернёт jitter.
+**Do not:** apply canvas space viewport rounding when `method == Screen Space` — jitter returns.
 
 ### 5.2. `renderer_canvas_cull.cpp`
 
-| При конфликте | Действие |
-|---------------|----------|
-| Изменён physics interpolation block | Snap остаётся **после** интерполяции, только если CPU mode |
-| Изменён y-sort / transform compose | `snapping_2d_transforms_to_pixel` = `use_cpu_transform_snap(...)` |
-| Новый параметр в `render_canvas` | Добавить `p_snap_2d_transforms_method` и пробросить дальше |
+| On conflict | Action |
+|-------------|--------|
+| Physics interpolation block changed | Rounding stays **after** interpolation; per-item via `uses_canvas_transform_snap` |
+| Y-sort / transform compose changed | Preserve `_item_uses_canvas_transform_snap` and `skip_screen_transform_snap` |
+| New `render_canvas` parameter | Add `p_snap_2d_transforms_method` and pass it through |
 
 ### 5.3. `canvas_render_items` signature
 
-Типичный конфликт: upstream добавил параметр в середину списка.
+Typical conflict: upstream added a parameter in the middle of the list.
 
-**Правило:** `p_snap_2d_transforms_method` — после `p_snap_2d_vertices_to_pixel`, перед `r_sdf_used`. Обновить **все** override: RD, GLES3, dummy, virtual в `renderer_canvas_render.h`.
+**Rule:** `p_snap_2d_transforms_method` goes after `p_snap_2d_vertices_to_pixel`, before `r_sdf_used`. Update **all** overrides: RD, GLES3, dummy, virtual in `renderer_canvas_render.h`.
 
-### 5.4. Шейдеры (`canvas.glsl`)
+### 5.4. Shaders (`canvas.glsl`)
 
-| При конфликте | Действие |
-|---------------|----------|
-| Upstream изменил vertex transform order | GPU snap block ставить **после** `canvas_transform`, **до** `use_pixel_snap` |
-| Upstream изменил `canvas_data` UBO | RD: использовать бит в `flags`, **не** добавлять поля в std140 без расчёта alignment |
-| GLES3: изменён `CanvasData` | GPU flag через `pad1`, не ломать sizeof `StateBuffer` |
-| Upstream переписал на другой backend | Найти аналог vertex shader canvas item, воспроизвести тот же порядок операций |
+| On conflict | Action |
+|-------------|--------|
+| Upstream changed vertex transform order | Place screen space snap **after** `canvas_transform`, **before** `use_pixel_snap` |
+| Upstream changed `canvas_data` UBO | RD: use a bit in `flags`; do not add std140 fields without alignment |
+| GLES3: `CanvasData` changed | Screen space flag via `pad1`; do not break `StateBuffer` sizeof |
+| Upstream rewrote backend | Find canvas item vertex shader equivalent; reproduce the same operation order |
 
-**Нельзя:**
+**Do not:**
 
-- Переносить GPU transform snap **до** `canvas_transform` (jitter вернётся).
-- Объединять GPU transform snap с `use_pixel_snap` / `snap_2d_vertices_to_pixel`.
+- Move screen space transform snap **before** `canvas_transform` (jitter returns).
+- Merge screen space transform snap with `use_pixel_snap` / `snap_2d_vertices_to_pixel`.
+- Forget `INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP` guard for per-item canvas space override.
 
 ### 5.5. `viewport.cpp` / bindings
 
-При конфликте в `_bind_methods`:
+On conflict in `_bind_methods`:
 
-1. Восстановить `BIND_ENUM_CONSTANT(SNAP_2D_TRANSFORMS_METHOD_CPU/GPU)`.
-2. Проверить `VARIANT_ENUM_CAST(Viewport::Snap2DTransformsMethod)` в `viewport.h`.
-3. `ADD_PROPERTY` для `snap_2d_transforms_method` рядом с `snap_2d_transforms_to_pixel`.
+1. Restore `BIND_ENUM_CONSTANT(SNAP_2D_TRANSFORMS_METHOD_CANVAS/SCREEN)`.
+2. Verify `VARIANT_ENUM_CAST(Viewport::Snap2DTransformsMethod)` in `viewport.h`.
+3. `ADD_PROPERTY` for `snap_2d_transforms_method` next to `snap_2d_transforms_to_pixel`.
 
-### 5.6. Документация XML
+**`canvas_item.cpp`:**
 
-Конфликты в `doc/classes/*.xml` — принять **обе** стороны: upstream текст + новые `<member>` для `snap_2d_transforms_method`.
+1. `BIND_ENUM_CONSTANT(SNAP_2D_TRANSFORMS_MODE_INHERIT/CANVAS/MAX)`.
+2. `VARIANT_ENUM_CAST(CanvasItem::Snap2DTransformsMode)` in `canvas_item.h`.
+
+### 5.6. Documentation XML
+
+Conflicts in `doc/classes/*.xml` — merge upstream text with new members:
+
+- `Viewport.snap_2d_transforms_method` + enum constants `SNAP_2D_TRANSFORMS_METHOD_CANVAS` / `SCREEN`
+- `CanvasItem.snap_2d_transforms_mode` + enum constants `SNAP_2D_TRANSFORMS_MODE_*`
+- `ProjectSettings.rendering/2d/snap/snap_2d_transforms_method`
+
+Property key names and int values are unchanged (`0` = canvas, `1` = screen).
 
 ---
 
-## 6. Grep-якоря для поиска после refactor upstream
+## 6. Grep anchors after upstream refactors
 
 ```bash
 rg "snap_2d_transforms_to_pixel" servers/rendering scene/main
 rg "_canvas_get_transform" servers/rendering/renderer_viewport.cpp
-rg "snapping_2d_transforms_to_pixel" servers/rendering
+rg "use_canvas_transform_snap|use_screen_transform_snap" servers/rendering
+rg "_item_uses_canvas_transform_snap|skip_screen_transform_snap" servers/rendering
 rg "use_pixel_snap" servers/rendering/renderer_rd drivers/gles3
 rg "floor\(transform_origin \+ vec2\(0\.5\)\)" servers/rendering/renderer_rd/shaders drivers/gles3/shaders
+rg "INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP" servers/rendering drivers/gles3
 rg "canvas_render_items" servers/rendering drivers/gles3
 rg "VARIANT_ENUM_CAST\(Viewport::" scene/main/viewport.h
+rg "VARIANT_ENUM_CAST\(CanvasItem::" scene/main/canvas_item.h
+rg "snap_2d_transforms_mode" scene/main
 ```
 
-Если upstream переименовал `RendererCanvasRenderRD` / split файлов — искать по `final_transform`, `canvas_transform_inverse`, `CANVAS_FLAGS_CONVERT_ATTRIBUTES_TO_LINEAR`.
+If upstream renamed `RendererCanvasRenderRD` or split files, search for `final_transform`, `canvas_transform_inverse`, `CANVAS_FLAGS_CONVERT_ATTRIBUTES_TO_LINEAR`.
 
 ---
 
-## 7. Частые ошибки при мерже
+## 7. Common merge mistakes
 
-1. **GPU snap до camera** — jitter возвращается.
-2. **CPU snap не guarded by method** — двойной snap или jitter.
-3. **Забыли обновить dummy/GLES3** после смены virtual signature — ошибка линковки.
-4. **Нет `VARIANT_ENUM_CAST`** — `error C2027` на `BIND_ENUM_CONSTANT`.
-5. **Смешали transform snap и vertex snap** в одном флаге — stretch или blur.
-6. **Sprite offset snap только для CPU** — blur на centered sprites в GPU mode.
-7. **Parallax workaround включён для GPU** — лишние артеfacts.
-8. **Правили только `.glsl`, забыли `.gen.h`** — расхождение при CI/build без regen.
+1. **Screen space snap before camera** — jitter returns.
+2. **Canvas space snap not guarded by method / per-item resolution** — double snap or jitter.
+3. **Forgot dummy/GLES3** after virtual signature change — link error.
+4. **Missing `VARIANT_ENUM_CAST`** — `error C2027` on `BIND_ENUM_CONSTANT`.
+5. **Merged transform snap and vertex snap into one flag** — stretch or blur.
+6. **Sprite offset snap missing** — blur on centered sprites in screen space mode.
+7. **Parallax workaround enabled for screen space** — unwanted artifacts.
+8. **Edited `.glsl` only, forgot `.gen.h`** — CI/build mismatch without regen.
+9. **Missing `INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP`** — per-item canvas space override has no effect.
+10. **Particle mesh not adjusted for screen space** — blurred particle textures.
 
 ---
 
-## 8. Минимальный diff для ручного восстановления (если patch не применяется)
+## 8. Minimal manual recovery (if patch does not apply)
 
-Если автomerge полностью провалился, восстановить в порядке:
+If automerge fails completely, restore in this order:
 
-1. Добавить `servers/rendering/renderer_snap_2d.h`
+1. Add `servers/rendering/renderer_snap_2d.h`
 2. Viewport enum + RS API + `RendererViewport::snap_2d_transforms_method`
-3. Guard CPU snap (cull + viewport)
-4. Расширить `canvas_render_items` + проброс `method`
-5. RD: `CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP` + shader block
-6. GLES3: `pad1` + shader block
-7. Scene: viewport property, scene_tree/editor_node init, sprite offsets
-8. Docs
+3. CanvasItem enum + `canvas_item_set_snap_2d_transforms_mode`
+4. Guard canvas space snap (cull + viewport) with per-item resolution
+5. Extend `canvas_render_items` + pass `method`
+6. RD: `CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP` + shader block + skip flag
+7. GLES3: `pad1` + shader block + skip flag
+8. Scene: viewport/canvas_item properties, scene_tree/editor_node init, sprite/particle offsets
+9. Docs + enum constants in XML
 
 ---
 
-## 9. Связь с upstream (для контекста агента)
+## 9. Upstream context
 
-| Версия | Поведение без патча |
-|--------|---------------------|
-| Godot 3.6 | Глобальный `use_gpu_pixel_snap`, snap в шейдере |
-| Godot 4.0–4.3 | CPU `.floor()` без half-pixel offset |
-| Godot 4.4+ | CPU `floor(+0.5)` + viewport `ceil` (#93786) |
-| **Патч** | Per-viewport `CPU` / `GPU`; GPU = origin snap после `canvas_transform` |
+| Mode | Behavior |
+|------|----------|
+| **Canvas Space** (default, int `0`) | Rounds transform origins in canvas space on the CPU, including viewport transform |
+| **Screen Space** (int `1`, this patch) | Rounds transform origins in screen space on the GPU after `canvas_transform` |
+| **Per-item Canvas Space** | Forces canvas space rounding for a subtree; disables screen space shader shift via `INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP` |
 
-Патч **не заменяет** upstream `snap_2d_vertices_to_pixel` — это отдельная опция.
+This patch does **not** replace upstream `snap_2d_vertices_to_pixel` — that remains a separate option.
 
 ---
 
-## 10. Коммит / PR (рекомендация)
+## 10. Suggested commit / PR message
 
 ```
-Add GPU mode for 2D transform pixel snapping
+Add screen space mode for 2D transform pixel snapping
 
-Introduce snap_2d_transforms_method (CPU/GPU) on Viewport and
-RenderingServer. GPU mode snaps transform origin in the canvas
-shader after the camera transform, avoiding CPU/viewport rounding
-jitter with physics interpolation while preserving sprite dimensions.
+Introduce snap_2d_transforms_method (Canvas Space / Screen Space) on
+Viewport and RenderingServer. Screen Space rounds transform origins in
+the canvas shader after the camera transform, avoiding canvas space
+rounding jitter with physics interpolation while preserving sprite
+dimensions. Add CanvasItem.snap_2d_transforms_mode for per-item canvas
+space opt-in.
 ```
 
 ---
 
-*Документ относится к форку/патчу на базе Godot 4.7. Обновляйте секцию «Базовая версия» после успешного forward-port.*
+*This document applies to the fork/patch based on Godot 4.7. Update the **Patch base version** section after a successful forward-port.*

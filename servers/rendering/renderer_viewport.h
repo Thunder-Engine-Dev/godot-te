@@ -92,7 +92,7 @@ public:
 
 		bool snap_2d_transforms_to_pixel = false;
 		bool snap_2d_vertices_to_pixel = false;
-		uint8_t snap_2d_transforms_method = RendererSnap2D::TRANSFORM_SNAP_CPU;
+		uint8_t snap_2d_transforms_method = RendererSnap2D::TRANSFORM_SNAP_CANVAS;
 
 		uint64_t time_cpu_begin;
 		uint64_t time_cpu_end;
@@ -176,7 +176,7 @@ public:
 
 			snap_2d_transforms_to_pixel = false;
 			snap_2d_vertices_to_pixel = false;
-			snap_2d_transforms_method = RendererSnap2D::TRANSFORM_SNAP_CPU;
+			snap_2d_transforms_method = RendererSnap2D::TRANSFORM_SNAP_CANVAS;
 
 			use_xr = false;
 			sdf_active = false;

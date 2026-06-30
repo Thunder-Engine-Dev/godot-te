@@ -36,6 +36,7 @@
 #include "core/object/class_db.h"
 #include "core/os/os.h"
 #include "scene/2d/cpu_particles_2d.h"
+#include "scene/main/viewport.h"
 #include "scene/resources/atlas_texture.h"
 #include "scene/resources/canvas_item_material.h"
 #include "scene/resources/curve_texture.h"
@@ -704,11 +705,16 @@ void GPUParticles2D::_notification(int p_what) {
 			} else {
 				RS::get_singleton()->mesh_clear(mesh);
 
+				Point2 dest_offset = -size * 0.5;
+				if (get_viewport() && get_viewport()->is_snap_2d_transforms_to_pixel_screen_enabled() && !is_snap_2d_transforms_canvas_space_in_tree()) {
+					dest_offset = (dest_offset + Point2(0.5, 0.5)).floor();
+				}
+
 				Vector<Vector2> points = {
-					Vector2(-size.x / 2.0, -size.y / 2.0),
-					Vector2(size.x / 2.0, -size.y / 2.0),
-					Vector2(size.x / 2.0, size.y / 2.0),
-					Vector2(-size.x / 2.0, size.y / 2.0)
+					dest_offset,
+					dest_offset + Vector2(size.x, 0),
+					dest_offset + size,
+					dest_offset + Vector2(0, size.y)
 				};
 
 				Vector<Vector2> uvs;

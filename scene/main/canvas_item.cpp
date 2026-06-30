@@ -305,6 +305,8 @@ void CanvasItem::_enter_canvas() {
 
 	queue_redraw();
 
+	_update_snap_2d_transforms_mode_changed(false);
+
 	notification(NOTIFICATION_ENTER_CANVAS);
 }
 
@@ -1569,6 +1571,10 @@ void CanvasItem::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_texture_repeat", "mode"), &CanvasItem::set_texture_repeat);
 	ClassDB::bind_method(D_METHOD("get_texture_repeat"), &CanvasItem::get_texture_repeat);
 
+	ClassDB::bind_method(D_METHOD("set_snap_2d_transforms_mode", "mode"), &CanvasItem::set_snap_2d_transforms_mode);
+	ClassDB::bind_method(D_METHOD("get_snap_2d_transforms_mode"), &CanvasItem::get_snap_2d_transforms_mode);
+	ClassDB::bind_method(D_METHOD("is_snap_2d_transforms_canvas_space_in_tree"), &CanvasItem::is_snap_2d_transforms_canvas_space_in_tree);
+
 	ClassDB::bind_method(D_METHOD("set_clip_children_mode", "mode"), &CanvasItem::set_clip_children_mode);
 	ClassDB::bind_method(D_METHOD("get_clip_children_mode"), &CanvasItem::get_clip_children_mode);
 
@@ -1596,6 +1602,10 @@ void CanvasItem::_bind_methods() {
 	ADD_GROUP("Texture", "texture_");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "texture_filter", PROPERTY_HINT_ENUM, "Inherit,Nearest,Linear,Nearest Mipmap,Linear Mipmap,Nearest Mipmap Anisotropic,Linear Mipmap Anisotropic"), "set_texture_filter", "get_texture_filter");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "texture_repeat", PROPERTY_HINT_ENUM, "Inherit,Disabled,Enabled,Mirror"), "set_texture_repeat", "get_texture_repeat");
+
+	ADD_GROUP("Transform Snap", "snap_2d_transforms_");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "snap_2d_transforms_mode", PROPERTY_HINT_ENUM, "Inherit,Canvas Space"), "set_snap_2d_transforms_mode", "get_snap_2d_transforms_mode");
+	ADD_PROPERTY_DEFAULT("snap_2d_transforms_mode", Snap2DTransformsMode::SNAP_2D_TRANSFORMS_MODE_INHERIT);
 
 	ADD_GROUP("Material", "");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "CanvasItemMaterial,ShaderMaterial"), "set_material", "get_material");
@@ -1642,6 +1652,10 @@ void CanvasItem::_bind_methods() {
 	BIND_ENUM_CONSTANT(OVERSAMPLING_WITH_SCALE_DISABLED);
 	BIND_ENUM_CONSTANT(OVERSAMPLING_WITH_SCALE_ENABLED);
 	BIND_ENUM_CONSTANT(OVERSAMPLING_WITH_SCALE_MAX);
+
+	BIND_ENUM_CONSTANT(SNAP_2D_TRANSFORMS_MODE_INHERIT);
+	BIND_ENUM_CONSTANT(SNAP_2D_TRANSFORMS_MODE_CANVAS);
+	BIND_ENUM_CONSTANT(SNAP_2D_TRANSFORMS_MODE_MAX);
 }
 
 Transform2D CanvasItem::get_canvas_transform() const {
@@ -1753,6 +1767,46 @@ void CanvasItem::_refresh_texture_filter_cache() const {
 	} else {
 		texture_filter_cache = RSE::CanvasItemTextureFilter(texture_filter);
 	}
+}
+
+void CanvasItem::_update_snap_2d_transforms_mode_changed(bool p_propagate) {
+	RS::get_singleton()->canvas_item_set_snap_2d_transforms_mode(get_canvas_item(), snap_2d_transforms_mode);
+
+	if (p_propagate) {
+		for (CanvasItem *child_ci : data.canvas_item_children) {
+			if (child_ci->snap_2d_transforms_mode == SNAP_2D_TRANSFORMS_MODE_INHERIT) {
+				child_ci->_update_snap_2d_transforms_mode_changed(true);
+			}
+		}
+	}
+}
+
+void CanvasItem::set_snap_2d_transforms_mode(Snap2DTransformsMode p_mode) {
+	ERR_FAIL_INDEX(p_mode, SNAP_2D_TRANSFORMS_MODE_MAX);
+	if (snap_2d_transforms_mode == p_mode) {
+		return;
+	}
+	snap_2d_transforms_mode = p_mode;
+	_update_snap_2d_transforms_mode_changed(true);
+	queue_redraw();
+}
+
+CanvasItem::Snap2DTransformsMode CanvasItem::get_snap_2d_transforms_mode() const {
+	return snap_2d_transforms_mode;
+}
+
+bool CanvasItem::is_snap_2d_transforms_canvas_space_in_tree() const {
+	Viewport *viewport = get_viewport();
+	if (!viewport || !viewport->is_snap_2d_transforms_to_pixel_enabled()) {
+		return false;
+	}
+	if (snap_2d_transforms_mode == SNAP_2D_TRANSFORMS_MODE_CANVAS) {
+		return true;
+	}
+	if (CanvasItem *parent_item = get_parent_item()) {
+		return parent_item->is_snap_2d_transforms_canvas_space_in_tree();
+	}
+	return viewport->is_snap_2d_transforms_to_pixel_canvas_enabled();
 }
 
 void CanvasItem::_update_self_texture_filter(RSE::CanvasItemTextureFilter p_texture_filter) {

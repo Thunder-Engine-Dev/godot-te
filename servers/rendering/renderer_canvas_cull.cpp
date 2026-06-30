@@ -82,7 +82,7 @@ void RendererCanvasCull::_render_canvas_item_tree(RID p_to_render_target, Canvas
 	memset(z_last_list, 0, z_range * sizeof(RendererCanvasRender::Item *));
 
 	for (int i = 0; i < p_child_item_count; i++) {
-		_cull_canvas_item(p_child_items[i].item, p_transform, p_clip_rect, Color(1, 1, 1, 1), 0, z_list, z_last_list, nullptr, nullptr, false, p_canvas_cull_mask, Point2(), 1, nullptr);
+		_cull_canvas_item(p_child_items[i].item, p_transform, p_clip_rect, Color(1, 1, 1, 1), 0, z_list, z_last_list, nullptr, nullptr, false, p_canvas_cull_mask, _viewport_uses_canvas_transform_snap, Point2(), 1, nullptr);
 	}
 
 	RendererCanvasRender::Item *list = nullptr;
@@ -110,7 +110,7 @@ void RendererCanvasCull::_render_canvas_item_tree(RID p_to_render_target, Canvas
 	}
 }
 
-void RendererCanvasCull::_collect_ysort_children(RendererCanvasCull::Item *p_canvas_item, RendererCanvasCull::Item *p_material_owner, const Color &p_modulate, RendererCanvasCull::Item **r_items, int &r_index, int &r_ysort_children_count, int p_z, uint32_t p_canvas_cull_mask) {
+void RendererCanvasCull::_collect_ysort_children(RendererCanvasCull::Item *p_canvas_item, RendererCanvasCull::Item *p_material_owner, const Color &p_modulate, RendererCanvasCull::Item **r_items, int &r_index, int &r_ysort_children_count, int p_z, uint32_t p_canvas_cull_mask, bool p_parent_uses_canvas_transform_snap) {
 	int child_item_count = p_canvas_item->child_items.size();
 	RendererCanvasCull::Item **child_items = p_canvas_item->child_items.ptrw();
 	for (int i = 0; i < child_item_count; i++) {
@@ -126,7 +126,7 @@ void RendererCanvasCull::_collect_ysort_children(RendererCanvasCull::Item *p_can
 					TransformInterpolator::interpolate_transform_2d(child_items[i]->xform_prev, child_items[i]->xform_curr, child_xform, f);
 				}
 
-				if (snapping_2d_transforms_to_pixel) {
+				if (_item_uses_canvas_transform_snap(child_items[i], p_parent_uses_canvas_transform_snap)) {
 					child_xform.columns[2] = (child_xform.columns[2] + Point2(0.5, 0.5)).floor();
 				}
 
@@ -154,7 +154,7 @@ void RendererCanvasCull::_collect_ysort_children(RendererCanvasCull::Item *p_can
 				r_index++;
 
 				if (child_items[i]->sort_y) {
-					_collect_ysort_children(child_items[i], child_items[i]->use_parent_material ? p_material_owner : child_items[i], p_modulate * child_items[i]->modulate, r_items, r_index, r_ysort_children_count, abs_z, p_canvas_cull_mask);
+					_collect_ysort_children(child_items[i], child_items[i]->use_parent_material ? p_material_owner : child_items[i], p_modulate * child_items[i]->modulate, r_items, r_index, r_ysort_children_count, abs_z, p_canvas_cull_mask, _item_uses_canvas_transform_snap(child_items[i], p_parent_uses_canvas_transform_snap));
 				}
 			} else {
 				r_ysort_children_count--;
@@ -303,7 +303,7 @@ void RendererCanvasCull::_attach_canvas_item_for_draw(RendererCanvasCull::Item *
 	}
 }
 
-void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2D &p_parent_xform, const Rect2 &p_clip_rect, const Color &p_modulate, int p_z, RendererCanvasRender::Item **r_z_list, RendererCanvasRender::Item **r_z_last_list, Item *p_canvas_clip, Item *p_material_owner, bool p_is_already_y_sorted, uint32_t p_canvas_cull_mask, const Point2 &p_repeat_size, int p_repeat_times, RendererCanvasRender::Item *p_repeat_source_item) {
+void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2D &p_parent_xform, const Rect2 &p_clip_rect, const Color &p_modulate, int p_z, RendererCanvasRender::Item **r_z_list, RendererCanvasRender::Item **r_z_last_list, Item *p_canvas_clip, Item *p_material_owner, bool p_is_already_y_sorted, uint32_t p_canvas_cull_mask, bool p_parent_uses_canvas_transform_snap, const Point2 &p_repeat_size, int p_repeat_times, RendererCanvasRender::Item *p_repeat_source_item) {
 	Item *ci = p_canvas_item;
 
 	if (!ci->visible) {
@@ -331,6 +331,10 @@ void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2
 	if (modulate.a < 0.007) {
 		return;
 	}
+
+	const bool uses_canvas_transform_snap = _item_uses_canvas_transform_snap(ci, p_parent_uses_canvas_transform_snap);
+	ci->use_canvas_transform_snap = uses_canvas_transform_snap;
+	ci->skip_screen_transform_snap = uses_canvas_transform_snap && _viewport_uses_screen_transform_snap;
 
 	Rect2 rect = ci->get_rect();
 
@@ -360,7 +364,7 @@ void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2
 
 		Transform2D parent_xform = p_parent_xform;
 
-		if (snapping_2d_transforms_to_pixel) {
+		if (uses_canvas_transform_snap) {
 			self_xform.columns[2] = (self_xform.columns[2] + Point2(0.5, 0.5)).floor();
 			parent_xform.columns[2] = (parent_xform.columns[2] + Point2(0.5, 0.5)).floor();
 		}
@@ -452,13 +456,14 @@ void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2
 			ci->ysort_parent_abs_z_index = parent_z;
 			child_items[0] = ci;
 			int i = 1;
-			_collect_ysort_children(ci, p_material_owner, Color(1, 1, 1, 1), child_items, i, child_item_count, p_z, p_canvas_cull_mask);
+			_collect_ysort_children(ci, p_material_owner, Color(1, 1, 1, 1), child_items, i, child_item_count, p_z, p_canvas_cull_mask, uses_canvas_transform_snap);
 
 			SortArray<Item *, ItemYSort> sorter;
 			sorter.sort(child_items, child_item_count);
 
 			for (i = 0; i < child_item_count; i++) {
-				_cull_canvas_item(child_items[i], final_xform * child_items[i]->ysort_xform, p_clip_rect, modulate * child_items[i]->ysort_modulate, child_items[i]->ysort_parent_abs_z_index, r_z_list, r_z_last_list, (Item *)ci->final_clip_owner, (Item *)child_items[i]->material_owner, true, p_canvas_cull_mask, child_items[i]->repeat_size, child_items[i]->repeat_times, child_items[i]->repeat_source_item);
+				const bool child_uses_canvas_transform_snap = _item_uses_canvas_transform_snap(child_items[i], uses_canvas_transform_snap);
+				_cull_canvas_item(child_items[i], final_xform * child_items[i]->ysort_xform, p_clip_rect, modulate * child_items[i]->ysort_modulate, child_items[i]->ysort_parent_abs_z_index, r_z_list, r_z_last_list, (Item *)ci->final_clip_owner, (Item *)child_items[i]->material_owner, true, p_canvas_cull_mask, child_uses_canvas_transform_snap, child_items[i]->repeat_size, child_items[i]->repeat_times, child_items[i]->repeat_source_item);
 			}
 		} else {
 			RendererCanvasRender::Item *canvas_group_from = nullptr;
@@ -482,21 +487,25 @@ void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2
 			if (!child_items[i]->behind && !use_canvas_group) {
 				continue;
 			}
-			_cull_canvas_item(child_items[i], final_xform, p_clip_rect, modulate, p_z, r_z_list, r_z_last_list, (Item *)ci->final_clip_owner, p_material_owner, false, p_canvas_cull_mask, repeat_size, repeat_times, repeat_source_item);
+			const bool child_uses_canvas_transform_snap = _item_uses_canvas_transform_snap(child_items[i], uses_canvas_transform_snap);
+			_cull_canvas_item(child_items[i], final_xform, p_clip_rect, modulate, p_z, r_z_list, r_z_last_list, (Item *)ci->final_clip_owner, p_material_owner, false, p_canvas_cull_mask, child_uses_canvas_transform_snap, repeat_size, repeat_times, repeat_source_item);
 		}
 		_attach_canvas_item_for_draw(ci, p_canvas_clip, r_z_list, r_z_last_list, final_xform, p_clip_rect, global_rect, modulate, p_z, p_material_owner, use_canvas_group, canvas_group_from);
 		for (int i = 0; i < child_item_count; i++) {
 			if (child_items[i]->behind || use_canvas_group) {
 				continue;
 			}
-			_cull_canvas_item(child_items[i], final_xform, p_clip_rect, modulate, p_z, r_z_list, r_z_last_list, (Item *)ci->final_clip_owner, p_material_owner, false, p_canvas_cull_mask, repeat_size, repeat_times, repeat_source_item);
+			const bool child_uses_canvas_transform_snap = _item_uses_canvas_transform_snap(child_items[i], uses_canvas_transform_snap);
+			_cull_canvas_item(child_items[i], final_xform, p_clip_rect, modulate, p_z, r_z_list, r_z_last_list, (Item *)ci->final_clip_owner, p_material_owner, false, p_canvas_cull_mask, child_uses_canvas_transform_snap, repeat_size, repeat_times, repeat_source_item);
 		}
 	}
 }
 
 void RendererCanvasCull::render_canvas(RID p_render_target, Canvas *p_canvas, const Transform2D &p_transform, RendererCanvasRender::Light *p_lights, RendererCanvasRender::Light *p_directional_lights, const Rect2 &p_clip_rect, RSE::CanvasItemTextureFilter p_default_filter, RSE::CanvasItemTextureRepeat p_default_repeat, bool p_snap_2d_transforms_to_pixel, bool p_snap_2d_vertices_to_pixel, uint8_t p_snap_2d_transforms_method, uint32_t canvas_cull_mask, RenderingServerTypes::RenderInfo *r_render_info) {
 	sdf_used = false;
-	snapping_2d_transforms_to_pixel = RendererSnap2D::use_cpu_transform_snap(p_snap_2d_transforms_to_pixel, (RendererSnap2D::TransformSnapMethod)p_snap_2d_transforms_method);
+	_snap_2d_transforms_to_pixel = p_snap_2d_transforms_to_pixel;
+	_viewport_uses_canvas_transform_snap = RendererSnap2D::use_canvas_transform_snap(p_snap_2d_transforms_to_pixel, (RendererSnap2D::TransformSnapMethod)p_snap_2d_transforms_method);
+	_viewport_uses_screen_transform_snap = RendererSnap2D::use_screen_transform_snap(p_snap_2d_transforms_to_pixel, (RendererSnap2D::TransformSnapMethod)p_snap_2d_transforms_method);
 
 	if (p_canvas->children_order_dirty) {
 		p_canvas->child_items.sort();
@@ -2507,6 +2516,23 @@ void RendererCanvasCull::canvas_item_set_default_texture_repeat(RID p_item, RSE:
 	Item *ci = canvas_item_owner.get_or_null(p_item);
 	ERR_FAIL_NULL(ci);
 	ci->texture_repeat = p_repeat;
+}
+
+bool RendererCanvasCull::_item_uses_canvas_transform_snap(const Item *p_item, bool p_parent_uses_canvas_transform_snap) const {
+	if (!_snap_2d_transforms_to_pixel) {
+		return false;
+	}
+	if (p_item->snap_2d_transforms_mode == RendererSnap2D::SNAP_2D_TRANSFORMS_ITEM_CANVAS) {
+		return true;
+	}
+	return p_parent_uses_canvas_transform_snap;
+}
+
+void RendererCanvasCull::canvas_item_set_snap_2d_transforms_mode(RID p_item, int p_mode) {
+	ERR_FAIL_INDEX(p_mode, RendererSnap2D::SNAP_2D_TRANSFORMS_ITEM_CANVAS + 1);
+	Item *ci = canvas_item_owner.get_or_null(p_item);
+	ERR_FAIL_NULL(ci);
+	ci->snap_2d_transforms_mode = p_mode;
 }
 
 void RendererCanvasCull::update_visibility_notifiers() {
