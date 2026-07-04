@@ -37,6 +37,7 @@ public:
 	enum TransformSnapMethod : uint8_t {
 		TRANSFORM_SNAP_CANVAS = 0,
 		TRANSFORM_SNAP_SCREEN = 1,
+		TRANSFORM_SNAP_SCREEN_MOVING = 2,
 	};
 
 	enum Snap2DTransformsItemMode : uint8_t {
@@ -44,11 +45,21 @@ public:
 		SNAP_2D_TRANSFORMS_ITEM_CANVAS = 1,
 	};
 
+	static constexpr float SCREEN_TRANSFORM_SNAP_MOVING_EPSILON = 0.01f;
+	// CharacterBody floor resolution can oscillate ~0.017 px on the secondary axis while
+	// moving on the primary axis. Suppress GPU snap on such an axis when another axis dominates.
+	static constexpr float SCREEN_TRANSFORM_SNAP_MOVING_JITTER_EPSILON = 0.02f;
+	static constexpr float SCREEN_TRANSFORM_SNAP_MOVING_DOMINANT_AXIS_RATIO = 2.0f;
+
 	static bool use_canvas_transform_snap(bool p_snap_2d_transforms_to_pixel, TransformSnapMethod p_method) {
 		return p_snap_2d_transforms_to_pixel && p_method == TRANSFORM_SNAP_CANVAS;
 	}
 
 	static bool use_screen_transform_snap(bool p_snap_2d_transforms_to_pixel, TransformSnapMethod p_method) {
-		return p_snap_2d_transforms_to_pixel && p_method == TRANSFORM_SNAP_SCREEN;
+		return p_snap_2d_transforms_to_pixel && (p_method == TRANSFORM_SNAP_SCREEN || p_method == TRANSFORM_SNAP_SCREEN_MOVING);
+	}
+
+	static bool use_screen_transform_snap_moving(bool p_snap_2d_transforms_to_pixel, TransformSnapMethod p_method) {
+		return p_snap_2d_transforms_to_pixel && p_method == TRANSFORM_SNAP_SCREEN_MOVING;
 	}
 };

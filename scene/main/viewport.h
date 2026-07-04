@@ -146,6 +146,7 @@ public:
 	enum Snap2DTransformsMethod {
 		SNAP_2D_TRANSFORMS_METHOD_CANVAS = 0,
 		SNAP_2D_TRANSFORMS_METHOD_SCREEN = 1,
+		SNAP_2D_TRANSFORMS_METHOD_SCREEN_MOVING = 2,
 	};
 
 	enum RenderInfo {

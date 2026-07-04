@@ -2398,6 +2398,12 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 	if (p_item->skip_screen_transform_snap) {
 		template_instance.flags |= INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP;
 	}
+	if (p_item->screen_transform_snap_x) {
+		template_instance.flags |= INSTANCE_FLAGS_SCREEN_TRANSFORM_SNAP_X;
+	}
+	if (p_item->screen_transform_snap_y) {
+		template_instance.flags |= INSTANCE_FLAGS_SCREEN_TRANSFORM_SNAP_Y;
+	}
 
 	bool use_lighting = (light_count > 0 || using_directional_lights);
 

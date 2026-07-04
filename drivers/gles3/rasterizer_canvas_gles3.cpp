@@ -873,6 +873,12 @@ void RasterizerCanvasGLES3::_record_item_commands(const Item *p_item, RID p_rend
 	if (p_item->skip_screen_transform_snap) {
 		base_flags |= INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP;
 	}
+	if (p_item->screen_transform_snap_x) {
+		base_flags |= INSTANCE_FLAGS_SCREEN_TRANSFORM_SNAP_X;
+	}
+	if (p_item->screen_transform_snap_y) {
+		base_flags |= INSTANCE_FLAGS_SCREEN_TRANSFORM_SNAP_Y;
+	}
 
 	bool lights_disabled = light_count == 0 && !state.using_directional_lights;
 

@@ -197,6 +197,7 @@ public:
 	bool _snap_2d_transforms_to_pixel = false;
 	bool _viewport_uses_canvas_transform_snap = false;
 	bool _viewport_uses_screen_transform_snap = false;
+	bool _viewport_uses_screen_transform_snap_moving = false;
 
 	bool debug_redraw = false;
 	double debug_redraw_time = 0;
@@ -205,11 +206,19 @@ public:
 	PagedAllocator<Item::VisibilityNotifierData> visibility_notifier_allocator;
 	SelfList<Item::VisibilityNotifierData>::List visibility_notifier_list;
 
+	void _detect_screen_transform_snap_axes(Item *p_item, const Point2 &p_world_origin, bool &r_moving_x, bool &r_moving_y);
+	void _resolve_screen_transform_snap_axes(bool p_moving_x, bool p_moving_y, bool p_inherit_gpu_snap_x, bool p_inherit_gpu_snap_y, bool &r_gpu_snap_x, bool &r_gpu_snap_y);
+	void _apply_axis_canvas_transform_snap(Transform2D &p_self_xform, Transform2D &p_parent_xform, bool p_canvas_snap_x, bool p_canvas_snap_y);
+	void _apply_hybrid_canvas_transform_snap(Transform2D &p_self_xform, Transform2D &p_parent_xform, bool p_gpu_snap_x, bool p_gpu_snap_y);
+	void _apply_render_origin_axis_canvas_snap(Transform2D &p_final_xform, bool p_canvas_snap_x, bool p_canvas_snap_y);
+	Point2 _get_screen_transform_snap_world_origin(const Transform2D &p_final_xform) const;
+	void _apply_screen_transform_snap_moving(Item *p_item, const Transform2D &p_unsnapped_final_xform, bool p_inherit_gpu_snap_x, bool p_inherit_gpu_snap_y, bool &r_gpu_snap_x, bool &r_gpu_snap_y);
+	void _finalize_screen_transform_snap_axes(Item *p_item);
 	_FORCE_INLINE_ void _attach_canvas_item_for_draw(Item *ci, Item *p_canvas_clip, RendererCanvasRender::Item **r_z_list, RendererCanvasRender::Item **r_z_last_list, const Transform2D &p_transform, const Rect2 &p_clip_rect, Rect2 p_global_rect, const Color &modulate, int p_z, RendererCanvasCull::Item *p_material_owner, bool p_use_canvas_group, RendererCanvasRender::Item *r_canvas_group_from);
 
 private:
 	void _render_canvas_item_tree(RID p_to_render_target, Canvas::ChildItem *p_child_items, int p_child_item_count, const Transform2D &p_transform, const Rect2 &p_clip_rect, const Color &p_modulate, RendererCanvasRender::Light *p_lights, RendererCanvasRender::Light *p_directional_lights, RSE::CanvasItemTextureFilter p_default_filter, RSE::CanvasItemTextureRepeat p_default_repeat, bool p_snap_2d_transforms_to_pixel, bool p_snap_2d_vertices_to_pixel, uint8_t p_snap_2d_transforms_method, uint32_t p_canvas_cull_mask, RenderingServerTypes::RenderInfo *r_render_info = nullptr);
-	void _cull_canvas_item(Item *p_canvas_item, const Transform2D &p_parent_xform, const Rect2 &p_clip_rect, const Color &p_modulate, int p_z, RendererCanvasRender::Item **r_z_list, RendererCanvasRender::Item **r_z_last_list, Item *p_canvas_clip, Item *p_material_owner, bool p_is_already_y_sorted, uint32_t p_canvas_cull_mask, bool p_parent_uses_canvas_transform_snap, const Point2 &p_repeat_size, int p_repeat_times, RendererCanvasRender::Item *p_repeat_source_item);
+	void _cull_canvas_item(Item *p_canvas_item, const Transform2D &p_snapped_parent_xform, const Transform2D &p_unsnapped_parent_xform, const Rect2 &p_clip_rect, const Color &p_modulate, int p_z, RendererCanvasRender::Item **r_z_list, RendererCanvasRender::Item **r_z_last_list, Item *p_canvas_clip, Item *p_material_owner, bool p_is_already_y_sorted, uint32_t p_canvas_cull_mask, bool p_parent_uses_canvas_transform_snap, bool p_inherit_gpu_snap_x, bool p_inherit_gpu_snap_y, const Point2 &p_repeat_size, int p_repeat_times, RendererCanvasRender::Item *p_repeat_source_item);
 
 	void _collect_ysort_children(RendererCanvasCull::Item *p_canvas_item, RendererCanvasCull::Item *p_material_owner, const Color &p_modulate, RendererCanvasCull::Item **r_items, int &r_index, int &r_ysort_children_count, int p_z, uint32_t p_canvas_cull_mask, bool p_parent_uses_canvas_transform_snap);
 	bool _item_uses_canvas_transform_snap(const Item *p_item, bool p_parent_uses_canvas_transform_snap) const;

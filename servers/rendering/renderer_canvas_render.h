@@ -374,6 +374,10 @@ public:
 		uint8_t snap_2d_transforms_mode = RendererSnap2D::SNAP_2D_TRANSFORMS_ITEM_INHERIT;
 		bool use_canvas_transform_snap = false;
 		bool skip_screen_transform_snap = false;
+		bool screen_transform_snap_x = false;
+		bool screen_transform_snap_y = false;
+		bool screen_transform_snap_world_origin_valid = false;
+		Point2 screen_transform_snap_world_origin_prev;
 
 		Rect2 global_rect_cache;
 

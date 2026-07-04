@@ -1601,7 +1601,7 @@ void RendererViewport::viewport_set_snap_2d_transforms_to_pixel(RID p_viewport, 
 void RendererViewport::viewport_set_snap_2d_transforms_method(RID p_viewport, int p_method) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
-	ERR_FAIL_COND(p_method < RendererSnap2D::TRANSFORM_SNAP_CANVAS || p_method > RendererSnap2D::TRANSFORM_SNAP_SCREEN);
+	ERR_FAIL_COND(p_method < RendererSnap2D::TRANSFORM_SNAP_CANVAS || p_method > RendererSnap2D::TRANSFORM_SNAP_SCREEN_MOVING);
 	viewport->snap_2d_transforms_method = p_method;
 }
 

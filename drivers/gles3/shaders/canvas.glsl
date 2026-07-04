@@ -269,7 +269,13 @@ void main() {
 
 	if ((pad1 & 1u) != 0u && (read_draw_data_flags & INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP) == uint(0)) {
 		vec2 transform_origin = (canvas_transform * model_matrix * vec4(0.0, 0.0, 0.0, 1.0)).xy;
-		vec2 snapped_origin = floor(transform_origin + vec2(0.5));
+		vec2 snapped_origin = transform_origin;
+		if ((read_draw_data_flags & INSTANCE_FLAGS_SCREEN_TRANSFORM_SNAP_X) != uint(0)) {
+			snapped_origin.x = floor(transform_origin.x + 0.5);
+		}
+		if ((read_draw_data_flags & INSTANCE_FLAGS_SCREEN_TRANSFORM_SNAP_Y) != uint(0)) {
+			snapped_origin.y = floor(transform_origin.y + 0.5);
+		}
 		vertex += snapped_origin - transform_origin;
 		// Precision issue on some hardware creates artifacts within texture.
 		uv += 1e-5;

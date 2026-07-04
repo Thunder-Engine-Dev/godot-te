@@ -3,7 +3,15 @@
 Guide for developers and agents when forward-porting this patch to newer Godot versions and resolving merge conflicts.
 
 **Patch base version:** Godot 4.7 / 4.7.1-rc  
-**Patch goal:** A **Screen Space** mode for `snap_2d_transforms_to_pixel` — no jitter with physics interpolation and scrolling cameras, without corner stretching (unlike `snap_2d_vertices_to_pixel`).
+**Patch goal:** Screen-space 2D transform pixel snap modes for `snap_2d_transforms_to_pixel` — no jitter with physics interpolation and scrolling cameras, without corner stretching (unlike `snap_2d_vertices_to_pixel`).
+
+**Modes:**
+
+| Int | Name | Summary |
+|-----|------|---------|
+| `0` | **Canvas Space** | Upstream CPU canvas snap (default) |
+| `1` | **Screen Space** | Always GPU screen snap (full patch v1) |
+| `2` | **Screen Space When Moving** | Hybrid: canvas snap when static in world space, per-axis GPU screen snap when moving |
 
 ---
 
@@ -16,23 +24,43 @@ Guide for developers and agents when forward-porting this patch to newer Godot v
 
 ### Patch solution
 
-1. New enum **`snap_2d_transforms_method`**: **Canvas Space** (upstream behavior, int `0`) / **Screen Space** (this patch, int `1`).
-2. In **Screen Space** mode:
+1. New enum **`snap_2d_transforms_method`**: **Canvas Space** (upstream, `0`) / **Screen Space** (`1`) / **Screen Space When Moving** (`2`, hybrid).
+2. In **Screen Space** and **Screen Space When Moving** modes:
    - Canvas space rounding in `renderer_canvas_cull.cpp` and `renderer_viewport.cpp` is **disabled** (unless overridden per item).
    - Transform origins are rounded in the shader **after** `canvas_transform` (camera already applied).
    - Only the **origin** is rounded, not each corner — quad size is preserved.
-3. Per-viewport setting on `Viewport` / `SubViewport` (not only a project setting).
-4. Draw offset correction in `Sprite2D` / `AnimatedSprite2D` / `RichTextLabel` when transform snap is enabled.
-5. Per-item override on `CanvasItem`: **`snap_2d_transforms_mode`** (`Inherit` / **Canvas Space**) to opt into canvas space rounding while the viewport uses screen space snapping.
-6. Particle quad mesh offset correction when screen space snap is active (centered quads).
+3. **Screen Space When Moving** additionally:
+   - Detects movement per axis in **world/canvas space** (camera-independent origin).
+   - Applies **CPU canvas snap** (same as mode `0`) on static axes.
+   - Applies **GPU screen snap** on moving axes (per-axis instance flags in shader).
+   - Passes **dual parent transform chains** during cull (snapped vs unsnapped) so static siblings keep cumulative canvas snap while GPU items (e.g. player) are not poisoned by ancestor canvas snap on the camera.
+   - Propagates **`inherit_gpu`** from a moving parent to children with fixed local offset.
+4. Per-viewport setting on `Viewport` / `SubViewport` (not only a project setting).
+5. Draw offset correction in `Sprite2D` / `AnimatedSprite2D` / `RichTextLabel` when transform snap is enabled.
+6. Per-item override on `CanvasItem`: **`snap_2d_transforms_mode`** (`Inherit` / **Canvas Space**) to opt into canvas space rounding while the viewport uses screen space snapping.
+7. Particle quad mesh offset correction when screen space snap is active (centered quads).
 
 ### Recommended configuration (SubViewport)
 
+**Always screen space** (moving platforms, camera follow, physics interpolation):
+
 ```
 snap_2d_transforms_to_pixel = true
-snap_2d_transforms_method = Screen Space   (Viewport.SNAP_2D_TRANSFORMS_METHOD_SCREEN)
+snap_2d_transforms_method = Screen Space   (Viewport.SNAP_2D_TRANSFORMS_METHOD_SCREEN = 1)
 snap_2d_vertices_to_pixel = false
 ```
+
+**Hybrid — autoscroll / static tilemap at fractional positions** (MF Community Edition default):
+
+```
+snap_2d_transforms_to_pixel = true
+snap_2d_transforms_method = Screen Space When Moving   (Viewport.SNAP_2D_TRANSFORMS_METHOD_SCREEN_MOVING = 2)
+snap_2d_vertices_to_pixel = false
+```
+
+Use case for mode `2`:
+- **Static** objects (tilemap, props at non-integer world positions) → **canvas snap** — stay sharp relative to each other; no jitter vs integer-aligned tiles when the camera scrolls.
+- **Moving** objects (player, enemies, autoscroll platform/camera group) → **GPU screen snap** — no jitter between each other or vs camera; relative subpixel jitter between moving objects is invisible.
 
 Optional per-item opt-in to canvas space rounding (legacy-style behavior for specific nodes):
 
@@ -88,6 +116,7 @@ snap_2d_transforms_mode = Canvas Space   (CanvasItem.SNAP_2D_TRANSFORMS_MODE_CAN
 enum TransformSnapMethod : uint8_t {
     TRANSFORM_SNAP_CANVAS = 0,
     TRANSFORM_SNAP_SCREEN = 1,
+    TRANSFORM_SNAP_SCREEN_MOVING = 2,
 };
 
 enum Snap2DTransformsItemMode : uint8_t {
@@ -95,8 +124,14 @@ enum Snap2DTransformsItemMode : uint8_t {
     SNAP_2D_TRANSFORMS_ITEM_CANVAS = 1,
 };
 
-use_canvas_transform_snap(enabled, method)  // Canvas space path (upstream)
-use_screen_transform_snap(enabled, method)  // Screen space path (this patch)
+// Movement detection (mode 2 only) — compared in world/canvas space per render frame
+static constexpr float SCREEN_TRANSFORM_SNAP_MOVING_EPSILON = 0.01f;
+static constexpr float SCREEN_TRANSFORM_SNAP_MOVING_JITTER_EPSILON = 0.02f;
+static constexpr float SCREEN_TRANSFORM_SNAP_MOVING_DOMINANT_AXIS_RATIO = 2.0f;
+
+use_canvas_transform_snap(enabled, method)           // method == CANVAS only
+use_screen_transform_snap(enabled, method)           // method == SCREEN or SCREEN_MOVING (shader path enabled)
+use_screen_transform_snap_moving(enabled, method)    // method == SCREEN_MOVING only (hybrid CPU/GPU cull)
 ```
 
 **Important:** The viewport method is read from the **viewport** (`snap_2d_transforms_method`), not from `GLOBAL_GET` at runtime.
@@ -122,7 +157,7 @@ Resolved per item via `_item_uses_canvas_transform_snap()`:
 
 **Wrong** (causes jitter): snap origin **before** `canvas_transform`, or snap in `model_matrix` space only.
 
-**Correct** (current patch):
+**Correct** (current patch — mode `1` always both axes; mode `2` per-axis):
 
 ```glsl
 vertex = (model_matrix * vec4(vertex, 0.0, 1.0)).xy;
@@ -132,7 +167,15 @@ vertex = (canvas_data.canvas_transform * vec4(vertex, 0.0, 1.0)).xy;
 if (bool(canvas_data.flags & CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP)
         && !bool(read_draw_data_flags & INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP)) {
     vec2 transform_origin = (canvas_data.canvas_transform * model_matrix * vec4(0.0, 0.0, 0.0, 1.0)).xy;
-    vec2 snapped_origin = floor(transform_origin + vec2(0.5));
+    vec2 snapped_origin = transform_origin;
+    // Mode 1: both flags always set by cull (_finalize_screen_transform_snap_axes).
+    // Mode 2: only axes flagged as "moving" get GPU snap; static axes rely on CPU canvas snap.
+    if (bool(read_draw_data_flags & INSTANCE_FLAGS_SCREEN_TRANSFORM_SNAP_X)) {
+        snapped_origin.x = floor(transform_origin.x + 0.5);
+    }
+    if (bool(read_draw_data_flags & INSTANCE_FLAGS_SCREEN_TRANSFORM_SNAP_Y)) {
+        snapped_origin.y = floor(transform_origin.y + 0.5);
+    }
     vertex += snapped_origin - transform_origin;
     uv += 1e-5;
 }
@@ -147,16 +190,140 @@ if (canvas_data.use_pixel_snap) {
 **RD:** flag `CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP (1 << 1)` in `canvas_data.flags`.  
 **GLES3:** same meaning via `state_buffer.pad1 = 1` (without changing UBO layout).
 
-**Per-item opt-out of screen space snap:** `INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP (1 << 29)` on instance flags when `Item::skip_screen_transform_snap` is set (canvas space override on a screen space viewport).
+**RD instance flags:**
 
-### 3.4. Parameter plumbing
+| Flag | Bit | Meaning |
+|------|-----|---------|
+| `INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP` | 29 | Per-item canvas override — no GPU snap |
+| `INSTANCE_FLAGS_SCREEN_TRANSFORM_SNAP_X` | 30 | GPU screen snap on X (mode `2` moving axis) |
+| `INSTANCE_FLAGS_SCREEN_TRANSFORM_SNAP_Y` | 31 | GPU screen snap on Y (mode `2` moving axis) |
+
+Mode `1` (Screen Space): `_finalize_screen_transform_snap_axes` sets both X/Y flags unless skipped.  
+Mode `2` (Screen Moving): flags come from cull (`screen_transform_snap_x/y` on `Item`).
+
+**Per-item opt-out of screen space snap:** `INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP (1 << 29)` when `Item::skip_screen_transform_snap` is set (canvas space override on a screen space viewport).
+
+### 3.4. Screen Space When Moving — hybrid cull (`renderer_canvas_cull.cpp`)
+
+**Design goal:** combine canvas sharpness for world-static objects with screen snap for world-moving objects, independently per X/Y axis.
+
+#### World-space movement detection
+
+Movement is detected from **world/canvas origin**, not local `self` origin:
+
+```cpp
+world_origin = inverse(current_camera_transform) * unsnapped_final_transform.origin;
+delta = world_origin - screen_transform_snap_world_origin_prev;  // per item, per render frame
+```
+
+Why world space:
+- Autoscroll: tilemap fixed in world → stable origin → **canvas snap**, even though it moves on screen with the camera.
+- Player on moving platform: world origin changes → **GPU snap**.
+- Camera child with fixed local offset: world origin stable → canvas; use **`inherit_gpu`** from moving parent instead.
+
+Detection runs on the **unsnapped** final transform (before CPU canvas snap).
+
+Constants (`renderer_snap_2d.h`):
+
+| Constant | Value | Role |
+|----------|-------|------|
+| `SCREEN_TRANSFORM_SNAP_MOVING_EPSILON` | `0.01` | Axis counts as moving if `\|delta\| >= epsilon` |
+| `SCREEN_TRANSFORM_SNAP_MOVING_JITTER_EPSILON` | `0.02` | Secondary-axis physics jitter threshold |
+| `SCREEN_TRANSFORM_SNAP_MOVING_DOMINANT_AXIS_RATIO` | `2.0` | Dominance ratio for jitter suppression |
+
+**Physics jitter suppression:** when **both** axes exceed `epsilon`, suppress the secondary axis if its delta is below `JITTER_EPSILON` and the other axis dominates (e.g. CharacterBody Y oscillating ~0.017 px while walking horizontally — do not enable GPU Y).
+
+#### GPU vs canvas resolution (per axis)
+
+```cpp
+gpu_snap_x = inherit_gpu_snap_x || detected_moving_x;
+gpu_snap_y = inherit_gpu_snap_y || detected_moving_y;
+// Default is canvas snap when neither inherit nor detected moving on that axis.
+```
+
+**Inheritance:** only `inherit_gpu_snap_x/y` is passed to children (when parent uses GPU on that axis). There is **no** `inherit_canvas` — static children decide canvas/GPU from their own world movement.
+
+#### CPU canvas snap (static axes)
+
+When `gpu_snap_x && gpu_snap_y` → no CPU snap (GPU handles both axes in shader).
+
+When fully static (`!gpu_snap_x && !gpu_snap_y`) → **identical to mode `0`**:
+
+```cpp
+self_xform.columns[2] = (self_xform.columns[2] + Point2(0.5, 0.5)).floor();
+snapped_parent_xform.columns[2] = (snapped_parent_xform.columns[2] + Point2(0.5, 0.5)).floor();
+final_xform = snapped_parent_xform * self_xform;
+```
+
+When mixed (one axis GPU, one canvas) → per-axis floor on `self` + `snapped_parent` via `_apply_axis_canvas_transform_snap`.
+
+Y-sort path (no self/parent split): `_apply_render_origin_axis_canvas_snap` on combined `final_xform` for static axes.
+
+#### Dual parent transform chains (critical)
+
+`_cull_canvas_item` takes **two** parent transforms:
+
+```cpp
+void _cull_canvas_item(...,
+    const Transform2D &p_snapped_parent_xform,
+    const Transform2D &p_unsnapped_parent_xform, ...);
+```
+
+Root call: both start as the camera/canvas transform.
+
+Per item:
+
+```cpp
+unsnapped_final = p_unsnapped_parent * self;
+// detect + resolve gpu flags on unsnapped_final
+// if fully GPU: final = unsnapped_final
+// if static/mixed: CPU canvas snap using p_snapped_parent copies → final for draw
+
+// Pass to children (mode 2 only, non-canvas-override items):
+child_unsnapped_parent = unsnapped_final;               // always
+child_snapped_parent   = gpu on any axis ? unsnapped_final : final;  // cumulative canvas chain
+```
+
+Why: a **static ancestor** (e.g. Level) must pass **cumulative canvas-snapped** transforms to static descendants (tilemap), but must **not** pass camera-snapped transforms to **GPU siblings** (e.g. Mario under the same Level). GPU items compose from the unsnapped chain.
+
+#### `Item` fields (`renderer_canvas_render.h`)
+
+```cpp
+bool screen_transform_snap_x = false;              // GPU output → instance flag X
+bool screen_transform_snap_y = false;              // GPU output → instance flag Y
+bool screen_transform_snap_world_origin_valid = false;
+Point2 screen_transform_snap_world_origin_prev;    // detection only (world space)
+```
+
+#### Cull helpers (`renderer_canvas_cull.h`)
+
+| Function | Role |
+|----------|------|
+| `_detect_screen_transform_snap_axes` | World-origin delta → `moving_x/y` |
+| `_resolve_screen_transform_snap_axes` | `gpu = inherit \|\| moving` per axis |
+| `_apply_screen_transform_snap_moving` | Detect + resolve; writes `screen_transform_snap_x/y` |
+| `_apply_hybrid_canvas_transform_snap` | CPU canvas snap for static axes |
+| `_apply_axis_canvas_transform_snap` | Per-axis self + parent floor |
+| `_apply_render_origin_axis_canvas_snap` | Y-sort fallback on combined final |
+| `_get_screen_transform_snap_world_origin` | `inverse(camera) * final.origin` |
+| `_finalize_screen_transform_snap_axes` | Mode `1`: force both GPU flags; mode `2`: leave cull flags |
+
+#### Viewport cull flags
+
+```cpp
+_viewport_uses_canvas_transform_snap      // mode == 0
+_viewport_uses_screen_transform_snap     // mode == 1 or 2 (shader enabled)
+_viewport_uses_screen_transform_snap_moving  // mode == 2 only (hybrid cull)
+```
+
+### 3.5. Parameter plumbing
 
 `canvas_render_items` receives an additional argument:
 
 ```cpp
 bool p_snap_2d_transforms_to_pixel,
 bool p_snap_2d_vertices_to_pixel,
-uint8_t p_snap_2d_transforms_method,  // NEW — int values unchanged: 0 = Canvas, 1 = Screen
+uint8_t p_snap_2d_transforms_method,  // 0 = Canvas, 1 = Screen, 2 = Screen When Moving
 ```
 
 Call chain:
@@ -168,15 +335,16 @@ RendererViewport (draw)
       → canvas_render_items(..., method)
         → state: flags / pad1 for screen space snap
         → per-item: skip_screen_transform_snap → INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP
+        → per-item (mode 2): screen_transform_snap_x/y → INSTANCE_FLAGS_SCREEN_TRANSFORM_SNAP_X/Y
 ```
 
-When forward-porting, search for: `snap_2d_transforms_method`, `render_canvas`, `canvas_render_items`, `skip_screen_transform_snap`.
+When forward-porting, search for: `snap_2d_transforms_method`, `render_canvas`, `canvas_render_items`, `skip_screen_transform_snap`, `screen_transform_snap`, `_viewport_uses_screen_transform_snap_moving`, `child_snapped_parent_xform`.
 
-### 3.5. Viewport / Scene
+### 3.6. Viewport / Scene
 
 **`viewport.h`:**
 
-- Enum `Snap2DTransformsMethod`: `SNAP_2D_TRANSFORMS_METHOD_CANVAS` (0), `SNAP_2D_TRANSFORMS_METHOD_SCREEN` (1).
+- Enum `Snap2DTransformsMethod`: `SNAP_2D_TRANSFORMS_METHOD_CANVAS` (0), `SNAP_2D_TRANSFORMS_METHOD_SCREEN` (1), `SNAP_2D_TRANSFORMS_METHOD_SCREEN_MOVING` (2).
 - `VARIANT_ENUM_CAST(Viewport::Snap2DTransformsMethod);` at end of file (**required**, otherwise C2027 on `BIND_ENUM_CONSTANT`).
 - `set/get_snap_2d_transforms_method`, `is_snap_2d_transforms_to_pixel_canvas_enabled()`, `is_snap_2d_transforms_to_pixel_screen_enabled()`.
 
@@ -242,13 +410,17 @@ Ensure **all** `canvas_render_items` implementations share the same signature (R
 ### Step 5 — Functional checklist
 
 - [ ] SubViewport: `snap_2d_transforms_to_pixel = on`, `method = Screen Space`, `vertices = off`
+- [ ] SubViewport hybrid: `method = Screen Space When Moving` — static tilemap sharp at fractional positions during autoscroll; moving player/platform use GPU snap
 - [ ] No ±1 px jitter: player on moving platform + camera follow + physics interpolation
+- [ ] Horizontal walk on sloped/smooth camera rise: no vertical jitter from physics Y oscillation (~0.017 px) falsely enabling GPU Y
 - [ ] Sprites are not stretched (unlike `vertices = on`)
 - [ ] Centered Sprite2D with odd dimensions — no extra blur (offset snap)
 - [ ] Particles — sharp textures in screen space mode (mesh offset)
 - [ ] Canvas Space mode (`method = Canvas Space`) — matches upstream canvas space behavior (regression)
+- [ ] Screen Space mode (`method = Screen Space`) — always GPU snap both axes (regression)
 - [ ] Per-item `snap_2d_transforms_mode = Canvas Space` on screen space viewport — no screen space shader shift
 - [ ] Parallax2D unchanged in screen space mode (workaround inactive)
+- [ ] GPU sibling (player) not affected by static ancestor canvas-snapping the camera into parent chain
 
 ---
 
@@ -271,8 +443,10 @@ Upstream often changes camera/viewport rounding.
 | On conflict | Action |
 |-------------|--------|
 | Physics interpolation block changed | Rounding stays **after** interpolation; per-item via `uses_canvas_transform_snap` |
-| Y-sort / transform compose changed | Preserve `_item_uses_canvas_transform_snap` and `skip_screen_transform_snap` |
+| Y-sort / transform compose changed | Preserve `_item_uses_canvas_transform_snap`, `skip_screen_transform_snap`, dual parent xforms |
 | New `render_canvas` parameter | Add `p_snap_2d_transforms_method` and pass it through |
+| `_cull_canvas_item` signature changed | Restore **two** parent transforms (`p_snapped_parent_xform`, `p_unsnapped_parent_xform`) for mode `2` |
+| Movement detection touched | Preserve world-origin detection, jitter suppression, `inherit_gpu` only (no `inherit_canvas`) |
 
 ### 5.3. `canvas_render_items` signature
 
@@ -285,6 +459,7 @@ Typical conflict: upstream added a parameter in the middle of the list.
 | On conflict | Action |
 |-------------|--------|
 | Upstream changed vertex transform order | Place screen space snap **after** `canvas_transform`, **before** `use_pixel_snap` |
+| Upstream changed per-instance flags layout | Preserve bits 29–31: SKIP, SNAP_X, SNAP_Y |
 | Upstream changed `canvas_data` UBO | RD: use a bit in `flags`; do not add std140 fields without alignment |
 | GLES3: `CanvasData` changed | Screen space flag via `pad1`; do not break `StateBuffer` sizeof |
 | Upstream rewrote backend | Find canvas item vertex shader equivalent; reproduce the same operation order |
@@ -294,12 +469,13 @@ Typical conflict: upstream added a parameter in the middle of the list.
 - Move screen space transform snap **before** `canvas_transform` (jitter returns).
 - Merge screen space transform snap with `use_pixel_snap` / `snap_2d_vertices_to_pixel`.
 - Forget `INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP` guard for per-item canvas space override.
+- Forget per-axis `INSTANCE_FLAGS_SCREEN_TRANSFORM_SNAP_X/Y` for mode `2`.
 
 ### 5.5. `viewport.cpp` / bindings
 
 On conflict in `_bind_methods`:
 
-1. Restore `BIND_ENUM_CONSTANT(SNAP_2D_TRANSFORMS_METHOD_CANVAS/SCREEN)`.
+1. Restore `BIND_ENUM_CONSTANT(SNAP_2D_TRANSFORMS_METHOD_CANVAS/SCREEN/SCREEN_MOVING)`.
 2. Verify `VARIANT_ENUM_CAST(Viewport::Snap2DTransformsMethod)` in `viewport.h`.
 3. `ADD_PROPERTY` for `snap_2d_transforms_method` next to `snap_2d_transforms_to_pixel`.
 
@@ -312,11 +488,11 @@ On conflict in `_bind_methods`:
 
 Conflicts in `doc/classes/*.xml` — merge upstream text with new members:
 
-- `Viewport.snap_2d_transforms_method` + enum constants `SNAP_2D_TRANSFORMS_METHOD_CANVAS` / `SCREEN`
+- `Viewport.snap_2d_transforms_method` + enum constants `SNAP_2D_TRANSFORMS_METHOD_CANVAS` / `SCREEN` / `SCREEN_MOVING`
 - `CanvasItem.snap_2d_transforms_mode` + enum constants `SNAP_2D_TRANSFORMS_MODE_*`
 - `ProjectSettings.rendering/2d/snap/snap_2d_transforms_method`
 
-Property key names and int values are unchanged (`0` = canvas, `1` = screen).
+Property key names: `0` = canvas, `1` = screen, `2` = screen when moving.
 
 ---
 
@@ -325,11 +501,12 @@ Property key names and int values are unchanged (`0` = canvas, `1` = screen).
 ```bash
 rg "snap_2d_transforms_to_pixel" servers/rendering scene/main
 rg "_canvas_get_transform" servers/rendering/renderer_viewport.cpp
-rg "use_canvas_transform_snap|use_screen_transform_snap" servers/rendering
-rg "_item_uses_canvas_transform_snap|skip_screen_transform_snap" servers/rendering
+rg "use_canvas_transform_snap|use_screen_transform_snap|use_screen_transform_snap_moving" servers/rendering
+rg "_item_uses_canvas_transform_snap|skip_screen_transform_snap|screen_transform_snap" servers/rendering
+rg "_detect_screen_transform_snap|_apply_hybrid_canvas|child_snapped_parent" servers/rendering
 rg "use_pixel_snap" servers/rendering/renderer_rd drivers/gles3
-rg "floor\(transform_origin \+ vec2\(0\.5\)\)" servers/rendering/renderer_rd/shaders drivers/gles3/shaders
-rg "INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP" servers/rendering drivers/gles3
+rg "INSTANCE_FLAGS_SCREEN_TRANSFORM_SNAP" servers/rendering/renderer_rd/shaders drivers/gles3/shaders
+rg "INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP|INSTANCE_FLAGS_SCREEN_TRANSFORM_SNAP" servers/rendering drivers/gles3
 rg "canvas_render_items" servers/rendering drivers/gles3
 rg "VARIANT_ENUM_CAST\(Viewport::" scene/main/viewport.h
 rg "VARIANT_ENUM_CAST\(CanvasItem::" scene/main/canvas_item.h
@@ -352,6 +529,12 @@ If upstream renamed `RendererCanvasRenderRD` or split files, search for `final_t
 8. **Edited `.glsl` only, forgot `.gen.h`** — CI/build mismatch without regen.
 9. **Missing `INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP`** — per-item canvas space override has no effect.
 10. **Particle mesh not adjusted for screen space** — blurred particle textures.
+11. **Mode `2`: single parent chain only** — static descendants lose canvas snap, or GPU siblings get camera-snapped parent (Mario jitter on platform).
+12. **Mode `2`: movement detected in local space instead of world** — autoscroll platform sprites miss GPU; tilemap false-moving.
+13. **Mode `2`: `inherit_canvas` reintroduced** — static parent forces canvas on all descendants including moving children.
+14. **Mode `2`: world snap on final instead of self+parent canvas snap** — static objects blurred (camera subpixel not handled like mode `0`).
+15. **Mode `2`: physics Y jitter (~0.017) enables GPU Y during horizontal walk** — vertical jitter with rising camera; use jitter suppression constants.
+16. **Mode `2`: `_finalize_screen_transform_snap_axes` overwrites per-axis flags** — must leave flags from cull when `use_screen_transform_snap_moving`.
 
 ---
 
@@ -364,10 +547,11 @@ If automerge fails completely, restore in this order:
 3. CanvasItem enum + `canvas_item_set_snap_2d_transforms_mode`
 4. Guard canvas space snap (cull + viewport) with per-item resolution
 5. Extend `canvas_render_items` + pass `method`
-6. RD: `CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP` + shader block + skip flag
-7. GLES3: `pad1` + shader block + skip flag
-8. Scene: viewport/canvas_item properties, scene_tree/editor_node init, sprite/particle offsets
-9. Docs + enum constants in XML
+6. RD: `CANVAS_FLAGS_USE_TRANSFORM_PIXEL_SNAP` + shader block + skip + per-axis snap flags
+7. GLES3: `pad1` + shader block + skip + per-axis snap flags
+8. Mode `2`: hybrid cull (world detection, dual parent chains, `inherit_gpu`, CPU canvas snap helpers)
+9. Scene: viewport/canvas_item properties, scene_tree/editor_node init, sprite/particle offsets
+10. Docs + enum constants in XML
 
 ---
 
@@ -376,8 +560,22 @@ If automerge fails completely, restore in this order:
 | Mode | Behavior |
 |------|----------|
 | **Canvas Space** (default, int `0`) | Rounds transform origins in canvas space on the CPU, including viewport transform |
-| **Screen Space** (int `1`, this patch) | Rounds transform origins in screen space on the GPU after `canvas_transform` |
+| **Screen Space** (int `1`) | Always rounds transform origins in screen space on the GPU after `canvas_transform` (both axes) |
+| **Screen Space When Moving** (int `2`) | Hybrid per axis: world-static → CPU canvas snap (mode `0` equivalent); world-moving → GPU screen snap; dual parent chains during cull |
 | **Per-item Canvas Space** | Forces canvas space rounding for a subtree; disables screen space shader shift via `INSTANCE_FLAGS_SKIP_SCREEN_TRANSFORM_SNAP` |
+
+### Mode `2` reference scenario (autoscroll platformer)
+
+Typical scene (MF Community Edition):
+
+```
+Level (Node2D, static in world)
+├── Mario / enemies (move in world → GPU snap)
+├── PathFollow2D + Camera2D + platform (move in world → GPU snap, inherit_gpu to children)
+└── TileMapLayer (fixed world coords → canvas snap, sharp vs fractional tile positions)
+```
+
+Movement detection uses **render frames** (not physics ticks): `screen_transform_snap_world_origin_prev` updates each viewport draw.
 
 This patch does **not** replace upstream `snap_2d_vertices_to_pixel` — that remains a separate option.
 
@@ -386,14 +584,15 @@ This patch does **not** replace upstream `snap_2d_vertices_to_pixel` — that re
 ## 10. Suggested commit / PR message
 
 ```
-Add screen space mode for 2D transform pixel snapping
+Add screen space modes for 2D transform pixel snapping
 
-Introduce snap_2d_transforms_method (Canvas Space / Screen Space) on
-Viewport and RenderingServer. Screen Space rounds transform origins in
-the canvas shader after the camera transform, avoiding canvas space
-rounding jitter with physics interpolation while preserving sprite
-dimensions. Add CanvasItem.snap_2d_transforms_mode for per-item canvas
-space opt-in.
+Introduce snap_2d_transforms_method (Canvas Space / Screen Space /
+Screen Space When Moving) on Viewport and RenderingServer. Screen Space
+rounds transform origins in the canvas shader after the camera transform.
+Screen Space When Moving hybridizes CPU canvas snap for world-static
+objects with per-axis GPU screen snap for world-moving objects, using
+world-origin detection, dual parent transform chains, and inherit_gpu.
+Add CanvasItem.snap_2d_transforms_mode for per-item canvas space opt-in.
 ```
 
 ---
