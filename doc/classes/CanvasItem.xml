@@ -689,6 +689,7 @@
 			Overrides how [member Viewport.snap_2d_transforms_to_pixel] is resolved for this node and its descendants.
 			[b]Inherit:[/b] Use the mode resolved from the parent [CanvasItem], or from the [Viewport] for root items.
 			[b]Canvas Space:[/b] Always round transform origins in canvas space. When the viewport uses screen space snapping, the item is not shifted by the canvas shader in screen space.
+			[b]Screen Space:[/b] Always apply screen space pixel snapping on both axes, without movement detection. Only effective when the viewport uses [constant Viewport.SNAP_2D_TRANSFORMS_METHOD_SCREEN_MOVING]. Children with [constant SNAP_2D_TRANSFORMS_MODE_INHERIT] inherit this behavior.
 		</member>
 		<member name="top_level" type="bool" setter="set_as_top_level" getter="is_set_as_top_level" default="false">
 			If [code]true[/code], this [CanvasItem] will [i]not[/i] inherit its transform from parent [CanvasItem]s. Its draw order will also be changed to make it draw on top of other [CanvasItem]s that do not have [member top_level] set to [code]true[/code]. The [CanvasItem] will effectively act as if it was placed as a child of a bare [Node].
@@ -841,7 +842,10 @@
 		<constant name="SNAP_2D_TRANSFORMS_MODE_CANVAS" value="1" enum="Snap2DTransformsMode">
 			Always round transform origins in canvas space. When the viewport uses screen space snapping, the item is not shifted by the canvas shader in screen space.
 		</constant>
-		<constant name="SNAP_2D_TRANSFORMS_MODE_MAX" value="2" enum="Snap2DTransformsMode">
+		<constant name="SNAP_2D_TRANSFORMS_MODE_SCREEN" value="2" enum="Snap2DTransformsMode">
+			Always apply screen space pixel snapping on both axes, without movement detection. Only effective when the viewport uses [constant Viewport.SNAP_2D_TRANSFORMS_METHOD_SCREEN_MOVING]. Children with [constant SNAP_2D_TRANSFORMS_MODE_INHERIT] inherit this behavior.
+		</constant>
+		<constant name="SNAP_2D_TRANSFORMS_MODE_MAX" value="3" enum="Snap2DTransformsMode">
 			Represents the size of the [enum Snap2DTransformsMode] enum.
 		</constant>
 	</constants>

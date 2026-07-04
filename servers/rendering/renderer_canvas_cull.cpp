@@ -82,7 +82,7 @@ void RendererCanvasCull::_render_canvas_item_tree(RID p_to_render_target, Canvas
 	memset(z_last_list, 0, z_range * sizeof(RendererCanvasRender::Item *));
 
 	for (int i = 0; i < p_child_item_count; i++) {
-		_cull_canvas_item(p_child_items[i].item, p_transform, p_transform, p_clip_rect, Color(1, 1, 1, 1), 0, z_list, z_last_list, nullptr, nullptr, false, p_canvas_cull_mask, _viewport_uses_canvas_transform_snap, false, false, Point2(), 1, nullptr);
+		_cull_canvas_item(p_child_items[i].item, p_transform, p_transform, p_clip_rect, Color(1, 1, 1, 1), 0, z_list, z_last_list, nullptr, nullptr, false, p_canvas_cull_mask, _viewport_uses_canvas_transform_snap, false, false, false, Point2(), 1, nullptr);
 	}
 
 	RendererCanvasRender::Item *list = nullptr;
@@ -198,18 +198,17 @@ void RendererCanvasCull::_detect_screen_transform_snap_axes(Item *p_item, const 
 		r_moving_x = Math::abs(delta.x) >= epsilon;
 		r_moving_y = Math::abs(delta.y) >= epsilon;
 
-		// Horizontal/vertical gameplay movement is usually axis-dominant. Tiny oscillation on
-		// the secondary axis (physics floor correction, float error) must not enable GPU snap
-		// on that axis while the object is effectively moving along the other one.
+		// Suppress GPU snap on a secondary axis when its delta is physics/float jitter
+		// (e.g. CharacterBody floor correction ~0.017 px) while the other axis moves.
 		if (r_moving_x && r_moving_y) {
 			const real_t abs_delta_x = Math::abs(delta.x);
 			const real_t abs_delta_y = Math::abs(delta.y);
 			const real_t jitter_epsilon = RendererSnap2D::SCREEN_TRANSFORM_SNAP_MOVING_JITTER_EPSILON;
-			const real_t dominant_ratio = RendererSnap2D::SCREEN_TRANSFORM_SNAP_MOVING_DOMINANT_AXIS_RATIO;
 
-			if (abs_delta_y < jitter_epsilon && abs_delta_x >= abs_delta_y * dominant_ratio) {
+			if (abs_delta_y < jitter_epsilon) {
 				r_moving_y = false;
-			} else if (abs_delta_x < jitter_epsilon && abs_delta_y >= abs_delta_x * dominant_ratio) {
+			}
+			if (abs_delta_x < jitter_epsilon) {
 				r_moving_x = false;
 			}
 		}
@@ -287,6 +286,30 @@ void RendererCanvasCull::_apply_hybrid_canvas_transform_snap(Transform2D &p_self
 	}
 
 	_apply_axis_canvas_transform_snap(p_self_xform, p_parent_xform, !p_gpu_snap_x, !p_gpu_snap_y);
+}
+
+Transform2D RendererCanvasCull::_build_screen_transform_snap_draw_xform(const Transform2D &p_final_xform, const Transform2D &p_unsnapped_final_xform, bool p_gpu_snap_x, bool p_gpu_snap_y) const {
+	if (p_gpu_snap_x && p_gpu_snap_y) {
+		return p_unsnapped_final_xform;
+	}
+	if (!p_gpu_snap_x && !p_gpu_snap_y) {
+		return p_final_xform;
+	}
+
+	// Mixed-axis GPU: hybrid final encodes per-level canvas snap on static axes, but composing
+	// through a canvas-snapped parent can quantize the moving axis before the GPU shader runs.
+	// Keep the unsnapped chain for GPU axes and copy static-axis origin from hybrid final.
+	Transform2D draw_xform = p_unsnapped_final_xform;
+	const Point2 canvas_origin = p_final_xform.columns[2];
+	Point2 draw_origin = draw_xform.columns[2];
+	if (!p_gpu_snap_x) {
+		draw_origin.x = canvas_origin.x;
+	}
+	if (!p_gpu_snap_y) {
+		draw_origin.y = canvas_origin.y;
+	}
+	draw_xform.columns[2] = draw_origin;
+	return draw_xform;
 }
 
 void RendererCanvasCull::_finalize_screen_transform_snap_axes(Item *p_item) {
@@ -416,7 +439,7 @@ void RendererCanvasCull::_attach_canvas_item_for_draw(RendererCanvasCull::Item *
 	}
 }
 
-void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2D &p_snapped_parent_xform, const Transform2D &p_unsnapped_parent_xform, const Rect2 &p_clip_rect, const Color &p_modulate, int p_z, RendererCanvasRender::Item **r_z_list, RendererCanvasRender::Item **r_z_last_list, Item *p_canvas_clip, Item *p_material_owner, bool p_is_already_y_sorted, uint32_t p_canvas_cull_mask, bool p_parent_uses_canvas_transform_snap, bool p_inherit_gpu_snap_x, bool p_inherit_gpu_snap_y, const Point2 &p_repeat_size, int p_repeat_times, RendererCanvasRender::Item *p_repeat_source_item) {
+void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2D &p_snapped_parent_xform, const Transform2D &p_unsnapped_parent_xform, const Rect2 &p_clip_rect, const Color &p_modulate, int p_z, RendererCanvasRender::Item **r_z_list, RendererCanvasRender::Item **r_z_last_list, Item *p_canvas_clip, Item *p_material_owner, bool p_is_already_y_sorted, uint32_t p_canvas_cull_mask, bool p_parent_uses_canvas_transform_snap, bool p_parent_uses_forced_screen_transform_snap, bool p_inherit_gpu_snap_x, bool p_inherit_gpu_snap_y, const Point2 &p_repeat_size, int p_repeat_times, RendererCanvasRender::Item *p_repeat_source_item) {
 	Item *ci = p_canvas_item;
 
 	if (!ci->visible) {
@@ -446,6 +469,7 @@ void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2
 	}
 
 	const bool uses_canvas_transform_snap = _item_uses_canvas_transform_snap(ci, p_parent_uses_canvas_transform_snap);
+	const bool uses_forced_screen_transform_snap = _item_uses_forced_screen_transform_snap(ci, p_parent_uses_forced_screen_transform_snap);
 	ci->use_canvas_transform_snap = uses_canvas_transform_snap;
 	ci->skip_screen_transform_snap = uses_canvas_transform_snap && _viewport_uses_screen_transform_snap;
 
@@ -469,7 +493,11 @@ void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2
 		// and is passed as parent xforms afterwards. No need to recalculate.
 		unsnapped_final_xform = p_unsnapped_parent_xform;
 		final_xform = p_snapped_parent_xform;
-		if (!uses_canvas_transform_snap && _viewport_uses_screen_transform_snap_moving && !ci->skip_screen_transform_snap && !ci->use_identity_transform) {
+		if (!uses_canvas_transform_snap && uses_forced_screen_transform_snap && _viewport_uses_screen_transform_snap && !ci->skip_screen_transform_snap && !ci->use_identity_transform) {
+			ci->screen_transform_snap_x = true;
+			ci->screen_transform_snap_y = true;
+			final_xform = unsnapped_final_xform;
+		} else if (!uses_canvas_transform_snap && _viewport_uses_screen_transform_snap_moving && !ci->skip_screen_transform_snap && !ci->use_identity_transform) {
 			bool gpu_snap_x = false;
 			bool gpu_snap_y = false;
 			_apply_screen_transform_snap_moving(ci, unsnapped_final_xform, p_inherit_gpu_snap_x, p_inherit_gpu_snap_y, gpu_snap_x, gpu_snap_y);
@@ -498,6 +526,10 @@ void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2
 			final_xform = snapped_parent_xform * self_xform;
 			ci->screen_transform_snap_x = false;
 			ci->screen_transform_snap_y = false;
+		} else if (uses_forced_screen_transform_snap && _viewport_uses_screen_transform_snap && !ci->skip_screen_transform_snap && !ci->use_identity_transform) {
+			ci->screen_transform_snap_x = true;
+			ci->screen_transform_snap_y = true;
+			final_xform = unsnapped_final_xform;
 		} else if (_viewport_uses_screen_transform_snap_moving && !ci->skip_screen_transform_snap && !ci->use_identity_transform) {
 			bool gpu_snap_x = false;
 			bool gpu_snap_y = false;
@@ -516,19 +548,29 @@ void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2
 		}
 	}
 
-	// Static descendants need the cumulative canvas-snapped chain; GPU descendants need unsnapped parents.
+	// Static descendants need the cumulative canvas-snapped chain from hybrid final. Unsnapped is kept
+	// separately for movement detection only. Draw uses _build_screen_transform_snap_draw_xform().
 	Transform2D child_snapped_parent_xform = final_xform;
 	Transform2D child_unsnapped_parent_xform = final_xform;
-	if (_viewport_uses_screen_transform_snap_moving && !uses_canvas_transform_snap) {
+	if (_viewport_uses_screen_transform_snap_moving && !uses_canvas_transform_snap && !uses_forced_screen_transform_snap) {
 		child_unsnapped_parent_xform = unsnapped_final_xform;
-		if (ci->screen_transform_snap_x || ci->screen_transform_snap_y) {
-			child_snapped_parent_xform = unsnapped_final_xform;
+	}
+
+	Transform2D draw_xform = final_xform;
+	if (!uses_canvas_transform_snap && !ci->skip_screen_transform_snap && !ci->use_identity_transform) {
+		if (uses_forced_screen_transform_snap) {
+			draw_xform = unsnapped_final_xform;
+		} else if (_viewport_uses_screen_transform_snap_moving) {
+			draw_xform = _build_screen_transform_snap_draw_xform(final_xform, unsnapped_final_xform, ci->screen_transform_snap_x, ci->screen_transform_snap_y);
 		}
 	}
 
 	bool child_inherit_gpu_snap_x = false;
 	bool child_inherit_gpu_snap_y = false;
-	if (_viewport_uses_screen_transform_snap_moving && !uses_canvas_transform_snap && !ci->skip_screen_transform_snap && !ci->use_identity_transform) {
+	if (uses_forced_screen_transform_snap && !uses_canvas_transform_snap && !ci->skip_screen_transform_snap && !ci->use_identity_transform) {
+		child_inherit_gpu_snap_x = true;
+		child_inherit_gpu_snap_y = true;
+	} else if (_viewport_uses_screen_transform_snap_moving && !uses_canvas_transform_snap && !ci->skip_screen_transform_snap && !ci->use_identity_transform) {
 		child_inherit_gpu_snap_x = ci->screen_transform_snap_x;
 		child_inherit_gpu_snap_y = ci->screen_transform_snap_y;
 	}
@@ -549,7 +591,7 @@ void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2
 
 	Rect2 global_rect;
 	if (!p_canvas_item->use_identity_transform) {
-		global_rect = final_xform.xform(rect);
+		global_rect = draw_xform.xform(rect);
 	} else {
 		global_rect = _current_camera_transform.xform(rect);
 	}
@@ -624,7 +666,8 @@ void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2
 
 			for (i = 0; i < child_item_count; i++) {
 				const bool child_uses_canvas_transform_snap = _item_uses_canvas_transform_snap(child_items[i], uses_canvas_transform_snap);
-				_cull_canvas_item(child_items[i], child_snapped_parent_xform * child_items[i]->ysort_xform, child_unsnapped_parent_xform * child_items[i]->ysort_xform, p_clip_rect, modulate * child_items[i]->ysort_modulate, child_items[i]->ysort_parent_abs_z_index, r_z_list, r_z_last_list, (Item *)ci->final_clip_owner, (Item *)child_items[i]->material_owner, true, p_canvas_cull_mask, child_uses_canvas_transform_snap, child_inherit_gpu_snap_x, child_inherit_gpu_snap_y, child_items[i]->repeat_size, child_items[i]->repeat_times, child_items[i]->repeat_source_item);
+				const bool child_uses_forced_screen_transform_snap = _item_uses_forced_screen_transform_snap(child_items[i], uses_forced_screen_transform_snap);
+				_cull_canvas_item(child_items[i], child_snapped_parent_xform * child_items[i]->ysort_xform, child_unsnapped_parent_xform * child_items[i]->ysort_xform, p_clip_rect, modulate * child_items[i]->ysort_modulate, child_items[i]->ysort_parent_abs_z_index, r_z_list, r_z_last_list, (Item *)ci->final_clip_owner, (Item *)child_items[i]->material_owner, true, p_canvas_cull_mask, child_uses_canvas_transform_snap, child_uses_forced_screen_transform_snap, child_inherit_gpu_snap_x, child_inherit_gpu_snap_y, child_items[i]->repeat_size, child_items[i]->repeat_times, child_items[i]->repeat_source_item);
 			}
 		} else {
 			RendererCanvasRender::Item *canvas_group_from = nullptr;
@@ -634,7 +677,7 @@ void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2
 				canvas_group_from = r_z_last_list[zidx];
 			}
 
-			_attach_canvas_item_for_draw(ci, p_canvas_clip, r_z_list, r_z_last_list, final_xform, p_clip_rect, global_rect, modulate, p_z, p_material_owner, use_canvas_group, canvas_group_from);
+			_attach_canvas_item_for_draw(ci, p_canvas_clip, r_z_list, r_z_last_list, draw_xform, p_clip_rect, global_rect, modulate, p_z, p_material_owner, use_canvas_group, canvas_group_from);
 		}
 	} else {
 		RendererCanvasRender::Item *canvas_group_from = nullptr;
@@ -649,15 +692,17 @@ void RendererCanvasCull::_cull_canvas_item(Item *p_canvas_item, const Transform2
 				continue;
 			}
 			const bool child_uses_canvas_transform_snap = _item_uses_canvas_transform_snap(child_items[i], uses_canvas_transform_snap);
-			_cull_canvas_item(child_items[i], child_snapped_parent_xform, child_unsnapped_parent_xform, p_clip_rect, modulate, p_z, r_z_list, r_z_last_list, (Item *)ci->final_clip_owner, p_material_owner, false, p_canvas_cull_mask, child_uses_canvas_transform_snap, child_inherit_gpu_snap_x, child_inherit_gpu_snap_y, repeat_size, repeat_times, repeat_source_item);
+			const bool child_uses_forced_screen_transform_snap = _item_uses_forced_screen_transform_snap(child_items[i], uses_forced_screen_transform_snap);
+			_cull_canvas_item(child_items[i], child_snapped_parent_xform, child_unsnapped_parent_xform, p_clip_rect, modulate, p_z, r_z_list, r_z_last_list, (Item *)ci->final_clip_owner, p_material_owner, false, p_canvas_cull_mask, child_uses_canvas_transform_snap, child_uses_forced_screen_transform_snap, child_inherit_gpu_snap_x, child_inherit_gpu_snap_y, repeat_size, repeat_times, repeat_source_item);
 		}
-		_attach_canvas_item_for_draw(ci, p_canvas_clip, r_z_list, r_z_last_list, final_xform, p_clip_rect, global_rect, modulate, p_z, p_material_owner, use_canvas_group, canvas_group_from);
+		_attach_canvas_item_for_draw(ci, p_canvas_clip, r_z_list, r_z_last_list, draw_xform, p_clip_rect, global_rect, modulate, p_z, p_material_owner, use_canvas_group, canvas_group_from);
 		for (int i = 0; i < child_item_count; i++) {
 			if (child_items[i]->behind || use_canvas_group) {
 				continue;
 			}
 			const bool child_uses_canvas_transform_snap = _item_uses_canvas_transform_snap(child_items[i], uses_canvas_transform_snap);
-			_cull_canvas_item(child_items[i], child_snapped_parent_xform, child_unsnapped_parent_xform, p_clip_rect, modulate, p_z, r_z_list, r_z_last_list, (Item *)ci->final_clip_owner, p_material_owner, false, p_canvas_cull_mask, child_uses_canvas_transform_snap, child_inherit_gpu_snap_x, child_inherit_gpu_snap_y, repeat_size, repeat_times, repeat_source_item);
+			const bool child_uses_forced_screen_transform_snap = _item_uses_forced_screen_transform_snap(child_items[i], uses_forced_screen_transform_snap);
+			_cull_canvas_item(child_items[i], child_snapped_parent_xform, child_unsnapped_parent_xform, p_clip_rect, modulate, p_z, r_z_list, r_z_last_list, (Item *)ci->final_clip_owner, p_material_owner, false, p_canvas_cull_mask, child_uses_canvas_transform_snap, child_uses_forced_screen_transform_snap, child_inherit_gpu_snap_x, child_inherit_gpu_snap_y, repeat_size, repeat_times, repeat_source_item);
 		}
 	}
 }
@@ -2690,8 +2735,21 @@ bool RendererCanvasCull::_item_uses_canvas_transform_snap(const Item *p_item, bo
 	return p_parent_uses_canvas_transform_snap;
 }
 
+bool RendererCanvasCull::_item_uses_forced_screen_transform_snap(const Item *p_item, bool p_parent_uses_forced_screen_transform_snap) const {
+	if (!_snap_2d_transforms_to_pixel || !_viewport_uses_screen_transform_snap || !_viewport_uses_screen_transform_snap_moving) {
+		return false;
+	}
+	if (p_item->snap_2d_transforms_mode == RendererSnap2D::SNAP_2D_TRANSFORMS_ITEM_SCREEN) {
+		return true;
+	}
+	if (p_item->snap_2d_transforms_mode == RendererSnap2D::SNAP_2D_TRANSFORMS_ITEM_CANVAS) {
+		return false;
+	}
+	return p_parent_uses_forced_screen_transform_snap;
+}
+
 void RendererCanvasCull::canvas_item_set_snap_2d_transforms_mode(RID p_item, int p_mode) {
-	ERR_FAIL_INDEX(p_mode, RendererSnap2D::SNAP_2D_TRANSFORMS_ITEM_CANVAS + 1);
+	ERR_FAIL_INDEX(p_mode, RendererSnap2D::SNAP_2D_TRANSFORMS_ITEM_SCREEN + 1);
 	Item *ci = canvas_item_owner.get_or_null(p_item);
 	ERR_FAIL_NULL(ci);
 	ci->snap_2d_transforms_mode = p_mode;

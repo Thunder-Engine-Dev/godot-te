@@ -1604,7 +1604,7 @@ void CanvasItem::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "texture_repeat", PROPERTY_HINT_ENUM, "Inherit,Disabled,Enabled,Mirror"), "set_texture_repeat", "get_texture_repeat");
 
 	ADD_GROUP("Transform Snap", "snap_2d_transforms_");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "snap_2d_transforms_mode", PROPERTY_HINT_ENUM, "Inherit,Canvas Space"), "set_snap_2d_transforms_mode", "get_snap_2d_transforms_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "snap_2d_transforms_mode", PROPERTY_HINT_ENUM, "Inherit,Canvas Space,Screen Space"), "set_snap_2d_transforms_mode", "get_snap_2d_transforms_mode");
 	ADD_PROPERTY_DEFAULT("snap_2d_transforms_mode", Snap2DTransformsMode::SNAP_2D_TRANSFORMS_MODE_INHERIT);
 
 	ADD_GROUP("Material", "");
@@ -1655,6 +1655,7 @@ void CanvasItem::_bind_methods() {
 
 	BIND_ENUM_CONSTANT(SNAP_2D_TRANSFORMS_MODE_INHERIT);
 	BIND_ENUM_CONSTANT(SNAP_2D_TRANSFORMS_MODE_CANVAS);
+	BIND_ENUM_CONSTANT(SNAP_2D_TRANSFORMS_MODE_SCREEN);
 	BIND_ENUM_CONSTANT(SNAP_2D_TRANSFORMS_MODE_MAX);
 }
 
