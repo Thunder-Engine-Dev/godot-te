@@ -367,6 +367,7 @@ public:
 		bool distance_field;
 		bool light_masked;
 		bool repeat_source;
+		bool has_particles = false;
 		Point2 repeat_size;
 		int repeat_times = 1;
 		Item *repeat_source_item = nullptr;
@@ -463,6 +464,7 @@ public:
 			last_command = nullptr;
 			commands = nullptr;
 			current_block = 0;
+			has_particles = false;
 			clip = false;
 			rect_dirty = true;
 			final_clip_owner = nullptr;

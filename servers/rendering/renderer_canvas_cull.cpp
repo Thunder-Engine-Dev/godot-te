@@ -2047,6 +2047,8 @@ void RendererCanvasCull::canvas_item_add_particles(RID p_item, RID p_particles, 
 	Item *canvas_item = canvas_item_owner.get_or_null(p_item);
 	ERR_FAIL_NULL(canvas_item);
 
+	canvas_item->has_particles = true;
+
 	Item::CommandParticles *part = canvas_item->alloc_command<Item::CommandParticles>();
 	ERR_FAIL_NULL(part);
 	part->particles = p_particles;
@@ -2744,6 +2746,10 @@ bool RendererCanvasCull::_item_uses_forced_screen_transform_snap(const Item *p_i
 	}
 	if (p_item->snap_2d_transforms_mode == RendererSnap2D::SNAP_2D_TRANSFORMS_ITEM_CANVAS) {
 		return false;
+	}
+	// GPU particles need screen-space snap every frame; movement detection would leave them canvas-snapped when static.
+	if (p_item->has_particles) {
+		return true;
 	}
 	return p_parent_uses_forced_screen_transform_snap;
 }

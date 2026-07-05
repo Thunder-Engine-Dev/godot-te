@@ -324,7 +324,7 @@ draw_origin.y = gpu_snap_y ? unsnapped.origin.y : final.origin.y;
 
 `_attach_canvas_item_for_draw` and `global_rect` use **`draw_xform`**, not `final_xform`.
 
-**Forced screen** (`snap_2d_transforms_mode == Screen Space`, mode `2` only): both GPU flags always; `final_xform = unsnapped_final`; `draw_xform = unsnapped_final`; `child_inherit_gpu_snap_x/y = true`; no dual-chain special case for unsnapped parent (both chains equal unsnapped).
+**Forced screen** (`snap_2d_transforms_mode == Screen Space`, or `has_particles`, mode `2` only): both GPU flags always; `final_xform = unsnapped_final`; `draw_xform = unsnapped_final`; `child_inherit_gpu_snap_x/y = true`; no dual-chain special case for unsnapped parent (both chains equal unsnapped).
 
 #### `Item` fields (`renderer_canvas_render.h`)
 
@@ -409,6 +409,8 @@ When forward-porting, search for: `snap_2d_transforms_method`, `render_canvas`, 
 
 **CPUParticles2D / GPUParticles2D:** mesh vertex offset `(dest_offset + 0.5).floor()` when screen space snap is active and the item does **not** use canvas space in tree.
 
+**GPUParticles2D (mode `2` only):** canvas items with a particles draw command set `has_particles`; `_item_uses_forced_screen_transform_snap` treats them like per-item **Screen Space** — always GPU snap on both axes, no movement detection. Per-item **Canvas Space** override still wins.
+
 ---
 
 ## 4. Forward-port workflow
@@ -459,6 +461,7 @@ Ensure **all** `canvas_render_items` implementations share the same signature (R
 - [ ] Sprites are not stretched (unlike `vertices = on`)
 - [ ] Centered Sprite2D with odd dimensions — no extra blur (offset snap)
 - [ ] Particles — sharp textures in screen space mode (mesh offset)
+- [ ] GPUParticles2D on mode `2` viewport — always GPU screen snap even when emitter is static; `Canvas Space` per-item override still works
 - [ ] Canvas Space mode (`method = Canvas Space`) — matches upstream canvas space behavior (regression)
 - [ ] Screen Space mode (`method = Screen Space`) — always GPU snap both axes (regression)
 - [ ] Per-item `snap_2d_transforms_mode = Canvas Space` on screen space viewport — no screen space shader shift
